@@ -70,6 +70,8 @@ public static class SensorEndpoints
                 return Results.BadRequest(new { message = "File exceeds the 25 MB attachment limit." });
             }
 
+            // Extension allow-listing and a size cap follow the upload-validation
+            // guidance in OWASP Foundation (n.d.).
             var extension = Path.GetExtension(file.FileName);
             if (!AllowedExtensions.Contains(extension.ToLowerInvariant()))
             {
@@ -80,7 +82,8 @@ public static class SensorEndpoints
             Directory.CreateDirectory(uploadsRoot);
 
             // Never trust the client-supplied file name for the on-disk path -
-            // store under a generated id and keep the original name only as metadata.
+            // store under a generated id and keep the original name only as
+            // metadata, per OWASP Foundation (n.d.).
             var storedFileName = $"{Guid.NewGuid()}{extension}";
             var storagePath = Path.Combine(uploadsRoot, storedFileName);
 

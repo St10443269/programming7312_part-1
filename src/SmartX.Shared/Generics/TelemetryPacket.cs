@@ -10,13 +10,14 @@ namespace SmartX.Shared.Generics;
 /// <remarks>
 /// <para>
 /// The <c>where T : struct</c> constraint is the important part: it limits
-/// <typeparamref name="T"/> to value types (float, int, bool, etc.) so the
-/// JIT builds a dedicated, closed generic type per <c>T</c> (e.g.
-/// <c>TelemetryPacket&lt;float&gt;</c>) instead of erasing to a shared
-/// reference-type implementation. The reading is stored directly in the
-/// struct's own memory layout - never coerced into <c>object</c> - so
-/// there is no boxing/unboxing overhead when thousands of packets a
-/// second are queued for ingestion.
+/// <typeparamref name="T"/> to value types (float, int, bool, etc.), which
+/// is what lets the JIT build a dedicated, closed generic type per
+/// <c>T</c> (e.g. <c>TelemetryPacket&lt;float&gt;</c>) instead of erasing
+/// to a shared reference-type implementation (Microsoft, 2026). The
+/// reading is stored directly in the struct's own memory layout - never
+/// coerced into <c>object</c> - so there is no boxing/unboxing overhead
+/// (Microsoft, 2025) when thousands of packets a second are queued for
+/// ingestion.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">

@@ -2,6 +2,11 @@ using System.Text.Json.Serialization;
 using SmartX.Api.Endpoints;
 using SmartX.Api.Services;
 
+// HTTP/JSON via Minimal APIs (Microsoft, n.d.) rather than a broker protocol
+// such as MQTT (OASIS, 2019) or CoAP (Internet Engineering Task Force, 2014):
+// this gateway's clients are a browser dashboard and simulated ingestion
+// calls, not battery-powered devices on a lossy radio link, so the lower
+// per-message overhead those protocols offer isn't the binding constraint here.
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.ConfigureHttpJsonOptions(options =>
