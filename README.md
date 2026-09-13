@@ -1,4 +1,4 @@
-# Smart-X Gateway — Part 1: Sensor Data Ingestion & Telemetry
+# Smart-X Gateway - Part 1: Sensor Data Ingestion & Telemetry
 
 A hybrid IoT ingestion API and dashboard for the Smart-X ecosystem (hydroponic
 farms, utility trackers, and smart grid installations). This submission
@@ -33,17 +33,17 @@ Smart-X/
         └── Services/               SmartXApiClient (typed HttpClient wrapper)
 ```
 
-Data is held in memory for this simulation (no database) — the brief's focus
-for Part 1 is the ingestion pipeline and dashboard, not persistence.
+Data is held in memory for this simulation (no database), since the brief's
+focus for Part 1 is the ingestion pipeline and dashboard, not persistence.
 
-## Required C# concepts — where to find them
+## Required C# concepts and where to find them
 
 | Requirement | Location |
 |---|---|
-| **Generics** | [`TelemetryPacket<T>`](src/SmartX.Shared/Generics/TelemetryPacket.cs) — a single `struct`-constrained generic class handles float/int/bool telemetry uniformly without boxing. |
-| **Operator overloading** | [`MeterReading`](src/SmartX.Shared/Aggregation/MeterReading.cs) — overloads `+`, `-`, `==`, `!=`, `>`, `<`, `>=`, `<=` so power readings aggregate/compare directly (`Meter3 = Meter1 + Meter2`), used for real in [`TelemetryStore.IngestInt`](src/SmartX.Api/Services/TelemetryStore.cs) to drive severity. |
-| **Advanced arrays/lists** | Jagged `float[][]` batch ingestion in [`TelemetryStore.IngestFloatBatch`](src/SmartX.Api/Services/TelemetryStore.cs) (sequential per-device sample batches → `List<TelemetryPacket<float>>`), and a rectangular `double[,]` zone-load matrix backing the grid heatmap. |
-| **Recursion** | [`DeploymentTreeValidator`](src/SmartX.Shared/Validation/DeploymentTreeValidator.cs) — walks Facility → Zone → Sub-Zone → Device trees of unknown depth. |
+| **Generics** | [`TelemetryPacket<T>`](src/SmartX.Shared/Generics/TelemetryPacket.cs): a single `struct`-constrained generic class handles float/int/bool telemetry uniformly without boxing. |
+| **Operator overloading** | [`MeterReading`](src/SmartX.Shared/Aggregation/MeterReading.cs): overloads `+`, `-`, `==`, `!=`, `>`, `<`, `>=`, `<=` so power readings aggregate/compare directly (`Meter3 = Meter1 + Meter2`), used for real in [`TelemetryStore.IngestInt`](src/SmartX.Api/Services/TelemetryStore.cs) to drive severity. |
+| **Advanced arrays/lists** | Jagged `float[][]` batch ingestion in [`TelemetryStore.IngestFloatBatch`](src/SmartX.Api/Services/TelemetryStore.cs) (sequential per-device sample batches, transferred into `List<TelemetryPacket<float>>`), and a rectangular `double[,]` zone-load matrix backing the grid heatmap. |
+| **Recursion** | [`DeploymentTreeValidator`](src/SmartX.Shared/Validation/DeploymentTreeValidator.cs): walks Facility → Zone → Sub-Zone → Device trees of unknown depth. |
 
 ## Dynamic engagement feature
 
@@ -57,11 +57,11 @@ in a mock-seeded batch, or via a "live simulation" polling loop).
 **Prerequisites**: [.NET 10 SDK](https://dotnet.microsoft.com/download).
 
 ```bash
-# Terminal 1 — API (http://localhost:5190)
+# Terminal 1: API (http://localhost:5190)
 cd src/SmartX.Api
 dotnet run --urls http://localhost:5190
 
-# Terminal 2 — Client dashboard (http://localhost:5122)
+# Terminal 2: Client dashboard (http://localhost:5122)
 cd src/SmartX.Client
 dotnet run --urls http://localhost:5122
 ```
@@ -93,13 +93,13 @@ Kestrel in its own container. See
 
 ## Using the app
 
-1. **Sensors** — register a device (MAC address, Facility/Zone/Sub-Zone,
+1. **Sensors**: register a device (MAC address, Facility/Zone/Sub-Zone,
    Node ID, category), then attach a config file, deployment photo, or log
    to it from the device roster table.
-2. **Telemetry** — seed mock readings or start the live simulation to watch
+2. **Telemetry**: seed mock readings or start the live simulation to watch
    the pulse feed, heatmap, and gauge; or push a single manual reading for a
    chosen device.
-3. **Deployment Tree** — load the valid sample tree, or the deliberately
+3. **Deployment Tree**: load the valid sample tree, or the deliberately
    broken one, and validate it to see the recursive validator's findings
    (blank names, invalid/duplicate MAC addresses, misplaced node kinds,
    devices with stray children).
@@ -128,7 +128,7 @@ With the API running, OpenAPI JSON is available at
 
 - CORS is configured for the client's dev origins (`http://localhost:5122`,
   `https://localhost:7163`) via `ClientOrigins` in `appsettings.json` /
-  environment variables — override it if you run the client elsewhere.
+  environment variables; override it if you run the client elsewhere.
 - Uploaded attachments are stored under `src/SmartX.Api/App_Data/uploads/`
   (git-ignored) and served back through the API.
 
