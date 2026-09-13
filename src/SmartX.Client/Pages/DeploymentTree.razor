@@ -1,0 +1,175 @@
+@page "/deployment"
+@inject SmartXApiClient Api
+
+<PageTitle>Deployment Tree Validation</PageTitle>
+
+<div class="page-kicker">// CONFIG VALIDATOR</div>
+<h1>Network Deployment &amp; Configuration Tree</h1>
+<p class="page-lead">Multi-tier profiles nest arbitrarily deep (Facility &rarr; Zone &rarr; Sub-Zone &rarr; Device), so the API walks the tree with a <strong class="accent">recursive</strong> validator rather than a flat loop.</p>
+
+<div class="toolbar">
+    <button class="btn" @onclick="LoadValidSampleAsync">Load valid sample</button>
+    <button class="btn" @onclick="LoadBrokenSample">Load broken sample</button>
+    <button class="sx-btn-primary" @onclick="ValidateAsync" disabled="@(_tree is null || _validating)">
+        @(_validating ? "Validating..." : "Validate tree")
+    </button>
+</div>
+
+<div class="layout">
+    <div class="sx-card">
+        <h2>Tree</h2>
+        @if (_tree is null)
+        {
+            <p class="muted">Load a sample tree to begin.</p>
+        }
+        else
+        {
+            <ul class="tree-root">
+                <DeploymentNodeView Node="_tree" />
+            </ul>
+        }
+    </div>
+
+    <div class="sx-card">
+        <h2>Validation result</h2>
+        @if (_issues is null)
+        {
+            <p class="muted">No validation run yet.</p>
+        }
+        else if (_issues.Count == 0)
+        {
+            <p class="success">&#10003; Tree is fully valid - no issues found across any node.</p>
+        }
+        else
+        {
+            <p class="@(_isValid ? "success" : "error")">
+                @(_isValid ? "Valid with warnings" : "Invalid") - @_issues.Count issue(s) found.
+            </p>
+            <ul class="issues">
+                @foreach (var issue in _issues)
+                {
+                    <li class="issue-@issue.Severity.ToString().ToLowerInvariant()">
+                        <span class="issue-severity">@issue.Severity</span>
+                        <span class="issue-path">@issue.NodePath</span>
+                        <span class="issue-message">@issue.Message</span>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+<style>
+    .page-kicker { font-family: var(--sx-font-mono); color: var(--sx-cyan); font-size: 0.8rem; letter-spacing: 0.15em; margin-bottom: 0.4rem; opacity: 0.85; }
+    .page-lead { color: var(--sx-text-dim); margin-bottom: 1.5rem; }
+    .accent { color: var(--sx-cyan); }
+
+    .toolbar { display: flex; gap: 0.6rem; margin-bottom: 1.1rem; flex-wrap: wrap; }
+    .btn { padding: 0.5rem 1rem; border-radius: 8px; font-weight: 600; cursor: pointer; border: 1px solid var(--sx-border); background: rgba(255,255,255,0.02); color: var(--sx-text); font-family: var(--sx-font-body); transition: border-color 0.15s ease, background 0.15s ease; }
+    .btn:hover { border-color: var(--sx-border-strong); background: rgba(0, 229, 255, 0.06); }
+    .sx-btn-primary { border: none; padding: 0.5rem 1.1rem; border-radius: 8px; cursor: pointer; }
+    .sx-btn-primary:disabled { opacity: 0.5; cursor: default; box-shadow: none; transform: none; }
+
+    .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; align-items: start; }
+    .sx-card h2 { font-size: 1.05rem; margin: 0 0 1rem; }
+    .muted { color: var(--sx-text-dim); }
+    .success { color: var(--sx-green); font-weight: 600; }
+    .error { color: var(--sx-red); font-weight: 600; }
+
+    ul.tree-root, ul.tree-root ul { list-style: none; margin: 0; padding-left: 1.1rem; border-left: 1px dashed rgba(0, 229, 255, 0.25); }
+    ul.tree-root { padding-left: 0; border-left: none; }
+    .node { margin: 0.4rem 0; }
+    .node-label { display: inline-flex; gap: 0.5rem; align-items: baseline; }
+    .node-kind { font-family: var(--sx-font-mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--sx-cyan); background: rgba(0, 229, 255, 0.1); border: 1px solid rgba(0, 229, 255, 0.25); border-radius: 999px; padding: 0.05rem 0.5rem; }
+    .node-mac { font-family: var(--sx-font-mono); font-size: 0.78rem; color: var(--sx-text-dim); }
+
+    ul.issues { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.45rem; }
+    ul.issues li { padding: 0.6rem 0.7rem; border-radius: 8px; font-size: 0.85rem; display: flex; gap: 0.6rem; flex-wrap: wrap; border: 1px solid transparent; }
+    .issue-severity { font-weight: 700; text-transform: uppercase; font-size: 0.72rem; font-family: var(--sx-font-mono); }
+    .issue-path { font-family: var(--sx-font-mono); font-size: 0.78rem; color: var(--sx-text-dim); }
+    .issue-info { background: rgba(0, 229, 255, 0.08); border-color: rgba(0, 229, 255, 0.2); }
+    .issue-info .issue-severity { color: var(--sx-cyan); }
+    .issue-warning { background: rgba(255, 176, 32, 0.08); border-color: rgba(255, 176, 32, 0.25); }
+    .issue-warning .issue-severity { color: var(--sx-amber); }
+    .issue-critical { background: rgba(255, 59, 96, 0.08); border-color: rgba(255, 59, 96, 0.3); }
+    .issue-critical .issue-severity { color: var(--sx-red); }
+
+    @@media (max-width: 900px) {
+        .layout { grid-template-columns: 1fr; }
+    }
+</style>
+
+@code {
+    private DeploymentNode? _tree;
+    private List<ValidationIssue>? _issues;
+    private bool _isValid;
+    private bool _validating;
+
+    private async Task LoadValidSampleAsync()
+    {
+        _tree = await Api.GetSampleDeploymentTreeAsync();
+        _issues = null;
+    }
+
+    private void LoadBrokenSample()
+    {
+        // Deliberately introduces: a blank node name, a duplicate MAC address
+        // reused across two Sub-Zones, an invalid MAC format, a Zone nested
+        // directly under a Zone, and a Device with a stray child - all of
+        // which the recursive validator should catch in one pass.
+        _tree = new DeploymentNode
+        {
+            Name = "Facility A",
+            Kind = DeploymentNodeKind.Facility,
+            Children =
+            [
+                new DeploymentNode
+                {
+                    Name = "Zone 1",
+                    Kind = DeploymentNodeKind.Zone,
+                    Children =
+                    [
+                        new DeploymentNode
+                        {
+                            Name = "",
+                            Kind = DeploymentNodeKind.SubZone,
+                            Children =
+                            [
+                                new DeploymentNode { Name = "Node 1", Kind = DeploymentNodeKind.Device, MacAddress = "24:6F:28:AA:11:01" },
+                                new DeploymentNode { Name = "Node 2", Kind = DeploymentNodeKind.Device, MacAddress = "NOT-A-MAC" }
+                            ]
+                        },
+                        new DeploymentNode
+                        {
+                            Name = "Zone 1a (nested Zone)",
+                            Kind = DeploymentNodeKind.Zone,
+                            Children =
+                            [
+                                new DeploymentNode
+                                {
+                                    Name = "Node 3 (duplicate MAC)",
+                                    Kind = DeploymentNodeKind.Device,
+                                    MacAddress = "24:6F:28:AA:11:01",
+                                    Children = [new DeploymentNode { Name = "Stray child", Kind = DeploymentNodeKind.Device, MacAddress = "24:6F:28:AA:11:99" }]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        };
+        _issues = null;
+    }
+
+    private async Task ValidateAsync()
+    {
+        if (_tree is null)
+        {
+            return;
+        }
+
+        _validating = true;
+        (_isValid, _issues) = await Api.ValidateDeploymentTreeAsync(_tree);
+        _validating = false;
+    }
+}

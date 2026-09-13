@@ -1,0 +1,363 @@
+@page "/telemetry"
+@implements IDisposable
+@inject SmartXApiClient Api
+
+<PageTitle>Telemetry Ingestion</PageTitle>
+
+<div class="page-kicker">// LIVE INGESTION PIPELINE</div>
+<h1>Sensor Data Ingestion &amp; Telemetry</h1>
+<p class="page-lead">Push readings into the API and watch the live Telemetry Pulse - a scrolling, severity-coded event feed synced to an animated grid-load heatmap, not just a progress bar.</p>
+
+<div class="toolbar">
+    <button class="btn" @onclick="SeedOnceAsync" disabled="@_seeding">
+        @(_seeding ? "Seeding..." : "Seed 15 mock readings")
+    </button>
+    <button class="@(IsLive ? "btn-stop" : "sx-btn-primary")" @onclick="ToggleLive">
+        @if (IsLive)
+        {
+            <span class="live-dot"></span>
+        }
+        @(IsLive ? "Stop live simulation" : "Start live simulation")
+    </button>
+    <span class="counter">Packets ingested this session <strong>@_sessionCount</strong></span>
+</div>
+
+<div class="layout">
+    <div class="sx-card">
+        <h2>Live Telemetry Pulse</h2>
+        @if (_feed.Count == 0)
+        {
+            <p class="muted">No telemetry yet - seed some mock readings to see the feed light up.</p>
+        }
+        else
+        {
+            <ul class="feed">
+                @foreach (var evt in _feed)
+                {
+                    <li class="feed-item sev-@evt.Severity.ToString().ToLowerInvariant()" @key="@($"{evt.DeviceId}-{evt.CapturedAtUtc.Ticks}")">
+                        <span class="feed-severity">@evt.Severity</span>
+                        <span class="feed-device">@evt.DeviceLabel</span>
+                        <span class="feed-sensor">@evt.SensorType</span>
+                        <span class="feed-value">@evt.DisplayValue</span>
+                        <span class="feed-time">@evt.CapturedAtUtc.ToLocalTime().ToString("HH:mm:ss")</span>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+
+    <div class="sx-card">
+        <h2>Grid Load Heatmap</h2>
+        <p class="muted small">Rolling power-draw matrix, zones (rows) &times; time slots (columns) - a rectangular <code>double[,]</code> server-side.</p>
+        @if (_grid is null || _grid.MaxWatts <= 0)
+        {
+            <p class="muted">No power readings yet.</p>
+        }
+        else
+        {
+            <div class="heatmap">
+                @for (var z = 0; z < _grid.ZoneNames.Length; z++)
+                {
+                    var zone = z;
+                    <div class="heatmap-row">
+                        <span class="heatmap-zone">@_grid.ZoneNames[zone]</span>
+                        <div class="heatmap-cells">
+                            @for (var s = 0; s < _grid.WattsByZoneThenSlot[zone].Length; s++)
+                            {
+                                var watts = _grid.WattsByZoneThenSlot[zone][s];
+                                var intensity = _grid.MaxWatts > 0 ? watts / _grid.MaxWatts : 0;
+                                <div class="heatmap-cell" style="@CellStyle(intensity)" title="@($"{watts:0} W")"></div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+        <h2 class="gauge-heading">Grid Load Gauge</h2>
+        <div class="gauge">
+            <svg viewBox="0 0 200 110" class="gauge-svg">
+                <defs>
+                    <filter id="gaugeGlow" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="3.5" result="blur" />
+                        <feMerge>
+                            <feMergeNode in="blur" />
+                            <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                    </filter>
+                </defs>
+                <path d="M10,100 A90,90 0 0 1 190,100" fill="none" stroke="rgba(0,229,255,0.1)" stroke-width="14" />
+                <path d="M10,100 A90,90 0 0 1 190,100" fill="none" stroke="@GaugeColor" stroke-width="14"
+                      stroke-dasharray="@GaugeDashArray" stroke-linecap="round" class="gauge-arc" filter="url(#gaugeGlow)" />
+                <text x="100" y="90" text-anchor="middle" class="gauge-text">@GaugeTotalWatts.ToString("0") W</text>
+            </svg>
+        </div>
+    </div>
+</div>
+
+<div class="sx-card manual-ingest">
+    <h2>Manual reading (single ingest)</h2>
+    @if (_sensors.Count == 0)
+    {
+        <p class="muted">Register a device on the <a href="/sensors">Sensors</a> page first.</p>
+    }
+    else
+    {
+        <div class="manual-row">
+            <label>
+                Device
+                <select class="sx-input" @bind="_selectedSensorId">
+                    @foreach (var sensor in _sensors)
+                    {
+                        <option value="@sensor.Id">@sensor.NodeId (@sensor.Category)</option>
+                    }
+                </select>
+            </label>
+
+            @{
+                var selected = _sensors.FirstOrDefault(s => s.Id == _selectedSensorId);
+            }
+
+            @if (selected is not null)
+            {
+                <label>
+                    Value
+                    @if (selected.Category == SensorCategory.Actuator)
+                    {
+                        <select class="sx-input" @bind="_boolInput">
+                            <option value="true">ON</option>
+                            <option value="false">OFF</option>
+                        </select>
+                    }
+                    else
+                    {
+                        <input class="sx-input" type="number" step="0.1" @bind="_numericInput" />
+                    }
+                </label>
+
+                <button class="sx-btn-primary" @onclick="() => SendManualAsync(selected)" disabled="@_sending">
+                    @(_sending ? "Sending..." : "Send reading")
+                </button>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    .page-kicker { font-family: var(--sx-font-mono); color: var(--sx-cyan); font-size: 0.8rem; letter-spacing: 0.15em; margin-bottom: 0.4rem; opacity: 0.85; }
+    .page-lead { color: var(--sx-text-dim); margin-bottom: 1.5rem; }
+
+    .toolbar { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1.1rem; flex-wrap: wrap; }
+    .btn, .sx-btn-primary, .btn-stop { padding: 0.5rem 1rem; border-radius: 8px; font-weight: 600; cursor: pointer; font-family: var(--sx-font-body); }
+    .btn { border: 1px solid var(--sx-border); background: rgba(255,255,255,0.02); color: var(--sx-text); transition: border-color 0.15s ease, background 0.15s ease; }
+    .btn:hover { border-color: var(--sx-border-strong); background: rgba(0, 229, 255, 0.06); }
+    .btn-stop { background: linear-gradient(135deg, #ff3b60, #b3123a); color: #fff; border: none; box-shadow: 0 0 14px rgba(255, 59, 96, 0.4); display: inline-flex; align-items: center; gap: 0.5rem; }
+    .btn:disabled, .sx-btn-primary:disabled { opacity: 0.5; cursor: default; }
+    .counter { margin-left: auto; font-size: 0.82rem; color: var(--sx-text-dim); font-family: var(--sx-font-mono); }
+    .counter strong { color: var(--sx-cyan); }
+
+    .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: sx-blink 1s ease-in-out infinite; }
+
+    .layout { display: grid; grid-template-columns: 1.1fr 1fr; gap: 1.25rem; align-items: start; }
+    .sx-card { margin-bottom: 1.25rem; }
+    .sx-card h2 { font-size: 1.05rem; margin: 0 0 0.75rem; }
+    .muted { color: var(--sx-text-dim); }
+    .small { font-size: 0.8rem; }
+
+    ul.feed { list-style: none; margin: 0; padding: 0; max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.4rem; }
+    .feed-item { display: flex; gap: 0.6rem; align-items: baseline; padding: 0.5rem 0.7rem; border-radius: 8px; font-size: 0.85rem; animation: pulse-in 0.35s ease; border: 1px solid transparent; border-left-width: 3px; background: rgba(255,255,255,0.02); }
+    .feed-severity { font-weight: 700; text-transform: uppercase; font-size: 0.66rem; min-width: 3.6rem; font-family: var(--sx-font-mono); }
+    .feed-device { font-weight: 600; }
+    .feed-sensor { color: var(--sx-text-dim); }
+    .feed-value { margin-left: auto; font-family: var(--sx-font-mono); }
+    .feed-time { color: var(--sx-text-faint); font-size: 0.75rem; font-family: var(--sx-font-mono); }
+
+    .sev-info { border-left-color: var(--sx-cyan); }
+    .sev-info .feed-severity, .sev-info .feed-value { color: var(--sx-cyan); }
+    .sev-warning { border-left-color: var(--sx-amber); }
+    .sev-warning .feed-severity, .sev-warning .feed-value { color: var(--sx-amber); }
+    .sev-critical { border-left-color: var(--sx-red); background: rgba(255, 59, 96, 0.06); }
+    .sev-critical .feed-severity, .sev-critical .feed-value { color: var(--sx-red); }
+
+    @@keyframes pulse-in {
+        from { opacity: 0; transform: translateY(-6px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .heatmap-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.35rem; }
+    .heatmap-zone { width: 4.5rem; font-size: 0.76rem; color: var(--sx-text-dim); font-family: var(--sx-font-mono); }
+    .heatmap-cells { display: flex; gap: 3px; }
+    .heatmap-cell { width: 16px; height: 16px; border-radius: 3px; transition: background-color 0.4s ease, box-shadow 0.4s ease; background: rgba(255,255,255,0.04); }
+
+    .gauge-heading { margin-top: 1.4rem; }
+    .gauge { display: flex; justify-content: center; }
+    .gauge-svg { width: 220px; }
+    .gauge-arc { transition: stroke-dasharray 0.6s ease, stroke 0.6s ease; }
+    .gauge-text { font-size: 16px; font-weight: 700; font-family: 'Share Tech Mono', monospace; fill: #dcecff; }
+
+    .manual-row { display: flex; gap: 1rem; align-items: end; flex-wrap: wrap; }
+    .manual-row label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--sx-text-dim); }
+    .manual-row .sx-input { display: block; margin-top: 0.3rem; padding: 0.5rem 0.65rem; font-weight: 400; font-family: var(--sx-font-body); min-width: 10rem; }
+
+    @@media (max-width: 900px) {
+        .layout { grid-template-columns: 1fr; }
+    }
+</style>
+
+@code {
+    private List<TelemetryEventDto> _feed = [];
+    private GridSnapshotDto? _grid;
+    private List<SensorSummaryDto> _sensors = [];
+    private int _sessionCount;
+    private bool _seeding;
+    private bool _sending;
+    private CancellationTokenSource? _liveCts;
+
+    private Guid _selectedSensorId;
+    private double _numericInput = 50;
+    private string _boolInput = "true";
+
+    private bool IsLive => _liveCts is not null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _sensors = await Api.GetSensorsAsync();
+        if (_sensors.Count > 0)
+        {
+            _selectedSensorId = _sensors[0].Id;
+        }
+
+        await RefreshFeedAndGridAsync();
+    }
+
+    private async Task SeedOnceAsync()
+    {
+        _seeding = true;
+        var events = await Api.SeedTelemetryAsync(15);
+        _sessionCount += events.Count;
+        await RefreshFeedAndGridAsync();
+        _seeding = false;
+    }
+
+    private void ToggleLive()
+    {
+        if (IsLive)
+        {
+            _liveCts!.Cancel();
+            _liveCts.Dispose();
+            _liveCts = null;
+            return;
+        }
+
+        _liveCts = new CancellationTokenSource();
+        _ = RunLiveLoopAsync(_liveCts.Token);
+    }
+
+    private async Task RunLiveLoopAsync(CancellationToken token)
+    {
+        while (!token.IsCancellationRequested)
+        {
+            try
+            {
+                var events = await Api.SeedTelemetryAsync(3);
+                _sessionCount += events.Count;
+                await RefreshFeedAndGridAsync();
+            }
+            catch
+            {
+                // Transient network hiccup - the loop just tries again on the next tick.
+            }
+
+            try
+            {
+                await Task.Delay(1200, token);
+            }
+            catch (TaskCanceledException)
+            {
+                return;
+            }
+        }
+    }
+
+    private async Task RefreshFeedAndGridAsync()
+    {
+        _feed = await Api.GetFeedAsync(25);
+        _grid = await Api.GetGridSnapshotAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SendManualAsync(SensorSummaryDto sensor)
+    {
+        _sending = true;
+
+        var request = sensor.Category switch
+        {
+            SensorCategory.Environmental => new TelemetryIngestRequest
+            {
+                DeviceId = sensor.Id, SensorType = "SoilMoisturePct", DataType = TelemetryDataType.Float, FloatValue = (float)_numericInput
+            },
+            SensorCategory.PowerConsumption => new TelemetryIngestRequest
+            {
+                DeviceId = sensor.Id, SensorType = "PowerWatts", DataType = TelemetryDataType.Integer, IntValue = (int)_numericInput
+            },
+            SensorCategory.Actuator => new TelemetryIngestRequest
+            {
+                DeviceId = sensor.Id, SensorType = "ValveOpen", DataType = TelemetryDataType.Boolean, BoolValue = _boolInput == "true"
+            },
+            _ => throw new InvalidOperationException()
+        };
+
+        await Api.IngestTelemetryAsync(request);
+        _sessionCount++;
+        await RefreshFeedAndGridAsync();
+
+        _sending = false;
+    }
+
+    private double GaugeTotalWatts => _grid?.LatestWattsByZone.Sum() ?? 0;
+
+    private const double GaugeMaxWatts = 2500;
+
+    private string GaugeDashArray
+    {
+        get
+        {
+            const double arcLength = 251.2; // approx length of the half-circle path above
+            var fraction = Math.Clamp(GaugeTotalWatts / GaugeMaxWatts, 0, 1);
+            var filled = arcLength * fraction;
+            return $"{filled:0.#} {arcLength:0.#}";
+        }
+    }
+
+    private string GaugeColor => GaugeTotalWatts switch
+    {
+        > 1800 => "#ff3b60",
+        > 900 => "#ffb020",
+        _ => "#00e5ff"
+    };
+
+    private string CellStyle(double intensity)
+    {
+        var clamped = Math.Clamp(intensity, 0, 1);
+        var alpha = (0.1 + clamped * 0.85).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        // Cool cyan for normal load, shifting to a hot magenta/red as a zone
+        // approaches the batch's peak wattage - a glow kicks in near the top
+        // so a spiking zone reads as "hot" at a glance, not just a color swap.
+        var (r, g, b) = clamped switch
+        {
+            > 0.75 => (255, 59, 96),
+            > 0.45 => (180, 91, 255),
+            _ => (0, 229, 255)
+        };
+
+        var glow = clamped > 0.6 ? $" box-shadow: 0 0 8px rgba({r},{g},{b},0.65);" : "";
+        return $"background-color: rgba({r},{g},{b},{alpha});{glow}";
+    }
+
+    public void Dispose()
+    {
+        _liveCts?.Cancel();
+        _liveCts?.Dispose();
+    }
+}

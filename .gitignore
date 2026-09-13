@@ -1,0 +1,22 @@
+## .NET
+bin/
+obj/
+out/
+publish/
+
+## Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+
+## Uploaded device attachments (runtime data, not source)
+src/SmartX.Api/App_Data/uploads/*
+!src/SmartX.Api/App_Data/uploads/.gitkeep
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Logs
+*.log

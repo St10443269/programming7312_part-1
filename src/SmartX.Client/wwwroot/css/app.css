@@ -1,0 +1,232 @@
+/* ===== Smart-X design tokens ===== */
+:root {
+    --sx-bg: #05070d;
+    --sx-bg-alt: #080b14;
+    --sx-surface: rgba(16, 22, 38, 0.72);
+    --sx-surface-solid: #0d1220;
+    --sx-border: rgba(0, 229, 255, 0.16);
+    --sx-border-strong: rgba(0, 229, 255, 0.4);
+
+    --sx-cyan: #00e5ff;
+    --sx-cyan-soft: rgba(0, 229, 255, 0.12);
+    --sx-purple: #b45bff;
+    --sx-green: #22ffb0;
+    --sx-amber: #ffb020;
+    --sx-red: #ff3b60;
+
+    --sx-text: #dcecff;
+    --sx-text-dim: #7c8aa8;
+    --sx-text-faint: #4c5975;
+
+    --sx-font-display: 'Orbitron', 'Rajdhani', sans-serif;
+    --sx-font-body: 'Rajdhani', 'Segoe UI', sans-serif;
+    --sx-font-mono: 'Share Tech Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+
+    --sx-glow-cyan: 0 0 12px rgba(0, 229, 255, 0.35);
+    --sx-glow-cyan-strong: 0 0 24px rgba(0, 229, 255, 0.55);
+    --sx-radius: 12px;
+}
+
+html, body {
+    font-family: var(--sx-font-body);
+    background: var(--sx-bg);
+    color: var(--sx-text);
+    min-height: 100vh;
+}
+
+body {
+    background-image:
+        linear-gradient(rgba(0, 229, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 229, 255, 0.05) 1px, transparent 1px),
+        radial-gradient(ellipse 80% 60% at 15% -10%, rgba(180, 91, 255, 0.16), transparent),
+        radial-gradient(ellipse 60% 50% at 100% 0%, rgba(0, 229, 255, 0.12), transparent);
+    background-size: 42px 42px, 42px 42px, auto, auto;
+    background-attachment: fixed;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--sx-font-display);
+    letter-spacing: 0.02em;
+    color: var(--sx-text);
+}
+
+h1:focus {
+    outline: none;
+}
+
+a, .btn-link {
+    color: var(--sx-cyan);
+}
+
+code, .sx-mono {
+    font-family: var(--sx-font-mono);
+    color: var(--sx-cyan);
+}
+
+/* ===== Buttons ===== */
+.btn-primary, .sx-btn-primary {
+    font-family: var(--sx-font-body);
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: #04121a;
+    background: linear-gradient(135deg, var(--sx-cyan), #00a3c4);
+    border: none;
+    box-shadow: var(--sx-glow-cyan);
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.btn-primary:hover, .sx-btn-primary:hover {
+    box-shadow: var(--sx-glow-cyan-strong);
+    transform: translateY(-1px);
+    color: #04121a;
+}
+
+.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
+    box-shadow: 0 0 0 0.15rem rgba(0, 229, 255, 0.35);
+}
+
+.valid.modified:not([type=checkbox]) {
+    outline: 1px solid var(--sx-green);
+}
+
+.invalid {
+    outline: 1px solid var(--sx-red);
+}
+
+.validation-message {
+    color: var(--sx-red);
+}
+
+::selection {
+    background: rgba(0, 229, 255, 0.3);
+}
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(0, 229, 255, 0.25);
+    border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 229, 255, 0.45);
+}
+
+#blazor-error-ui {
+    color-scheme: dark only;
+    background: #1a0d12;
+    border-top: 1px solid var(--sx-red);
+    bottom: 0;
+    box-shadow: 0 -4px 20px rgba(255, 59, 96, 0.3);
+    box-sizing: border-box;
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+    color: var(--sx-text);
+    font-family: var(--sx-font-body);
+}
+
+    #blazor-error-ui .dismiss {
+        cursor: pointer;
+        position: absolute;
+        right: 0.75rem;
+        top: 0.5rem;
+        color: var(--sx-text-dim);
+    }
+
+.blazor-error-boundary {
+    background: #1a0d12;
+    border: 1px solid var(--sx-red);
+    border-radius: var(--sx-radius);
+    padding: 1rem 1rem 1rem 1.25rem;
+    color: var(--sx-text);
+}
+
+    .blazor-error-boundary::after {
+        content: "An error has occurred."
+    }
+
+.loading-progress {
+    position: absolute;
+    display: block;
+    width: 8rem;
+    height: 8rem;
+    inset: 20vh 0 auto 0;
+    margin: 0 auto 0 auto;
+}
+
+    .loading-progress circle {
+        fill: none;
+        stroke: rgba(0, 229, 255, 0.15);
+        stroke-width: 0.6rem;
+        transform-origin: 50% 50%;
+        transform: rotate(-90deg);
+    }
+
+        .loading-progress circle:last-child {
+            stroke: var(--sx-cyan);
+            filter: drop-shadow(0 0 6px rgba(0, 229, 255, 0.7));
+            stroke-dasharray: calc(3.141 * var(--blazor-load-percentage, 0%) * 0.8), 500%;
+            transition: stroke-dasharray 0.05s ease-in-out;
+        }
+
+.loading-progress-text {
+    position: absolute;
+    text-align: center;
+    font-weight: bold;
+    font-family: var(--sx-font-mono);
+    color: var(--sx-cyan);
+    inset: calc(20vh + 3.25rem) 0 auto 0.2rem;
+}
+
+    .loading-progress-text:after {
+        content: var(--blazor-load-percentage-text, "Loading");
+    }
+
+.form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
+    color: var(--bs-secondary-color);
+    text-align: end;
+}
+
+.form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
+    text-align: start;
+}
+
+/* ===== Shared Smart-X component classes (used across pages) ===== */
+.sx-card {
+    background: var(--sx-surface);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--sx-border);
+    border-radius: var(--sx-radius);
+    padding: 1.25rem;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.02) inset, 0 8px 30px rgba(0,0,0,0.35);
+}
+
+.sx-input {
+    background: rgba(5, 10, 20, 0.7);
+    border: 1px solid var(--sx-border);
+    color: var(--sx-text);
+    border-radius: 8px;
+}
+
+.sx-input:focus {
+    outline: none;
+    border-color: var(--sx-border-strong);
+    box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.15);
+    background: rgba(5, 10, 20, 0.9);
+    color: var(--sx-text);
+}
+
+.sx-input::placeholder {
+    color: var(--sx-text-faint);
+}

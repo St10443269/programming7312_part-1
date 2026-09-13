@@ -1,0 +1,234 @@
+@page "/sensors"
+@inject SmartXApiClient Api
+
+<PageTitle>Sensor Registration</PageTitle>
+
+<div class="page-kicker">// DEVICE REGISTRY</div>
+<h1>Sensor Payload Management</h1>
+<p class="page-lead">Register a Smart-X device and attach its config export, deployment photo, or hardware log.</p>
+
+<div class="layout">
+    <EditForm Model="_form" OnValidSubmit="RegisterAsync" class="sx-card">
+        <DataAnnotationsValidator />
+        <h2>Register device</h2>
+
+        <label>
+            MAC Address
+            <InputText class="sx-input" @bind-Value="_form.MacAddress" placeholder="24:6F:28:AA:11:01" />
+        </label>
+
+        <label>
+            Facility
+            <InputText class="sx-input" @bind-Value="_form.FacilityName" placeholder="Facility A" />
+        </label>
+
+        <label>
+            Zone
+            <InputText class="sx-input" @bind-Value="_form.ZoneName" placeholder="Zone 1" />
+        </label>
+
+        <label>
+            Sub-Zone <span class="optional">(optional)</span>
+            <InputText class="sx-input" @bind-Value="_form.SubZoneName" placeholder="Sub-Zone B" />
+        </label>
+
+        <label>
+            Node ID
+            <InputText class="sx-input" @bind-Value="_form.NodeId" placeholder="Hydroponic Node 1" />
+        </label>
+
+        <label>
+            Category
+            <InputSelect class="sx-input" @bind-Value="_form.Category">
+                @foreach (var category in Enum.GetValues<SensorCategory>())
+                {
+                    <option value="@category">@category</option>
+                }
+            </InputSelect>
+        </label>
+
+        <button type="submit" class="sx-btn-primary" disabled="@_submitting">
+            @(_submitting ? "Registering..." : "Register device")
+        </button>
+
+        @if (_error is not null)
+        {
+            <p class="error">@_error</p>
+        }
+        @if (_success is not null)
+        {
+            <p class="success">@_success</p>
+        }
+    </EditForm>
+
+    <div class="sx-card">
+        <h2>Registered devices <span class="count-badge">@_sensors.Count</span></h2>
+
+        @if (_loading)
+        {
+            <p class="muted">Loading...</p>
+        }
+        else if (_sensors.Count == 0)
+        {
+            <p class="muted">No devices registered yet.</p>
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Node</th>
+                            <th>Deployment</th>
+                            <th>Category</th>
+                            <th>MAC</th>
+                            <th>Files</th>
+                            <th>Attach</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var sensor in _sensors)
+                        {
+                            <tr>
+                                <td>@sensor.NodeId</td>
+                                <td>@sensor.DeploymentPath</td>
+                                <td><span class="cat-badge cat-@sensor.Category.ToString().ToLowerInvariant()">@sensor.Category</span></td>
+                                <td class="mono">@sensor.MacAddress</td>
+                                <td>@sensor.AttachmentCount</td>
+                                <td>
+                                    <InputFile class="sx-file" OnChange="args => UploadAsync(sensor.Id, args)" />
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .page-kicker { font-family: var(--sx-font-mono); color: var(--sx-cyan); font-size: 0.8rem; letter-spacing: 0.15em; margin-bottom: 0.4rem; opacity: 0.85; }
+    .page-lead { color: var(--sx-text-dim); margin-bottom: 1.5rem; }
+
+    .layout { display: grid; grid-template-columns: minmax(280px, 380px) 1fr; gap: 1.25rem; align-items: start; }
+
+    .sx-card h2 { font-size: 1.05rem; margin: 0 0 1rem; }
+    .sx-card label { display: block; margin-bottom: 0.85rem; font-size: 0.85rem; font-weight: 600; color: var(--sx-text-dim); }
+    .sx-card .sx-input { display: block; width: 100%; margin-top: 0.3rem; padding: 0.5rem 0.65rem; font-weight: 400; font-family: var(--sx-font-body); font-size: 0.95rem; }
+    .optional { font-weight: 400; color: var(--sx-text-faint); }
+
+    .sx-btn-primary { border: none; padding: 0.6rem 1.2rem; border-radius: 8px; cursor: pointer; }
+    .sx-btn-primary:disabled { opacity: 0.5; cursor: default; box-shadow: none; transform: none; }
+
+    .error { color: var(--sx-red); margin-top: 0.85rem; font-size: 0.9rem; }
+    .success { color: var(--sx-green); margin-top: 0.85rem; font-size: 0.9rem; }
+    .muted { color: var(--sx-text-dim); }
+
+    .count-badge {
+        display: inline-block; font-family: var(--sx-font-mono); font-size: 0.75rem;
+        background: rgba(0, 229, 255, 0.12); color: var(--sx-cyan); border: 1px solid rgba(0, 229, 255, 0.3);
+        border-radius: 999px; padding: 0.1rem 0.55rem; vertical-align: middle;
+    }
+
+    .table-scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; min-width: 640px; }
+    th { text-align: left; padding: 0.5rem; font-family: var(--sx-font-mono); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--sx-text-faint); border-bottom: 1px solid var(--sx-border); }
+    td { text-align: left; padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--sx-text); }
+    tbody tr:hover { background: rgba(0, 229, 255, 0.04); }
+    .mono { font-family: var(--sx-font-mono); font-size: 0.82rem; color: var(--sx-cyan); }
+
+    .cat-badge {
+        font-family: var(--sx-font-mono); font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: 999px;
+        border: 1px solid currentColor; opacity: 0.9;
+    }
+    .cat-environmental { color: var(--sx-green); }
+    .cat-powerconsumption { color: var(--sx-amber); }
+    .cat-actuator { color: var(--sx-purple); }
+
+    .sx-file { color: var(--sx-text-dim); font-size: 0.82rem; max-width: 160px; }
+    .sx-file::file-selector-button {
+        background: rgba(0, 229, 255, 0.1); color: var(--sx-cyan); border: 1px solid rgba(0, 229, 255, 0.3);
+        border-radius: 6px; padding: 0.3rem 0.6rem; font-family: var(--sx-font-body); font-weight: 600; cursor: pointer; margin-right: 0.5rem;
+    }
+    .sx-file::file-selector-button:hover { background: rgba(0, 229, 255, 0.2); }
+
+    @@media (max-width: 860px) {
+        .layout { grid-template-columns: 1fr; }
+    }
+</style>
+
+@code {
+    private readonly RegisterSensorForm _form = new();
+    private List<SensorSummaryDto> _sensors = [];
+    private bool _loading = true;
+    private bool _submitting;
+    private string? _error;
+    private string? _success;
+
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        _sensors = await Api.GetSensorsAsync();
+        _loading = false;
+    }
+
+    private async Task RegisterAsync()
+    {
+        _submitting = true;
+        _error = null;
+        _success = null;
+
+        var (success, error) = await Api.RegisterSensorAsync(new RegisterSensorRequest
+        {
+            MacAddress = _form.MacAddress.Trim(),
+            FacilityName = _form.FacilityName.Trim(),
+            ZoneName = _form.ZoneName.Trim(),
+            SubZoneName = string.IsNullOrWhiteSpace(_form.SubZoneName) ? null : _form.SubZoneName.Trim(),
+            NodeId = _form.NodeId.Trim(),
+            Category = _form.Category
+        });
+
+        if (success)
+        {
+            _success = $"Registered '{_form.NodeId}'.";
+            _form.Reset();
+            await RefreshAsync();
+        }
+        else
+        {
+            _error = error ?? "Registration failed.";
+        }
+
+        _submitting = false;
+    }
+
+    private async Task UploadAsync(Guid sensorId, InputFileChangeEventArgs args)
+    {
+        const long maxBytes = 25 * 1024 * 1024;
+        var file = args.File;
+
+        await using var stream = file.OpenReadStream(maxBytes);
+        await Api.UploadAttachmentAsync(sensorId, stream, file.Name, file.ContentType);
+        await RefreshAsync();
+    }
+
+    private sealed class RegisterSensorForm
+    {
+        public string MacAddress { get; set; } = "";
+        public string FacilityName { get; set; } = "Facility A";
+        public string ZoneName { get; set; } = "Zone 1";
+        public string? SubZoneName { get; set; }
+        public string NodeId { get; set; } = "";
+        public SensorCategory Category { get; set; } = SensorCategory.Environmental;
+
+        public void Reset()
+        {
+            MacAddress = "";
+            NodeId = "";
+            SubZoneName = null;
+        }
+    }
+}

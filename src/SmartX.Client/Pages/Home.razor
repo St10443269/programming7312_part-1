@@ -1,0 +1,177 @@
+@page "/"
+
+<PageTitle>Smart-X Gateway</PageTitle>
+
+<div class="hero">
+    <div class="hero-kicker">// GATEWAY ROOT</div>
+    <h1>SMART-X <span class="hero-accent">GATEWAY</span></h1>
+    <p>Hybrid IoT command surface for hydroponic farms, utility trackers, and smart grid installations.</p>
+</div>
+
+<div class="pillar-grid">
+    <a class="pillar-card enabled" href="/telemetry">
+        <span class="pillar-badge enabled">Part 1 &middot; Online</span>
+        <h2>Sensor Data Ingestion &amp; Telemetry</h2>
+        <p>Register devices, ingest live readings, and watch the telemetry pulse feed and grid load heatmap.</p>
+        <span class="pillar-cta">Launch module &rarr;</span>
+    </a>
+
+    <div class="pillar-card disabled" aria-disabled="true">
+        <span class="pillar-badge disabled">Part 2 &middot; Locked</span>
+        <h2>Real-Time Command Stream &amp; History</h2>
+        <p>Bidirectional command streaming and historical playback. Enabled in Part 2 of the PoE.</p>
+        <span class="pillar-cta">Awaiting clearance</span>
+    </div>
+
+    <div class="pillar-card disabled" aria-disabled="true">
+        <span class="pillar-badge disabled">Final PoE &middot; Locked</span>
+        <h2>Network Topology &amp; Mesh Routing</h2>
+        <p>Mesh routing visualisation across the gateway network. Enabled in the final PoE submission.</p>
+        <span class="pillar-cta">Awaiting clearance</span>
+    </div>
+</div>
+
+<div class="pillar-grid" style="margin-top: 1.1rem;">
+    <a class="pillar-card enabled" href="/sensors">
+        <span class="pillar-badge enabled">Devices</span>
+        <h2>Sensor Registration</h2>
+        <p>Register a device, attach config files or deployment photos, and browse the device roster.</p>
+        <span class="pillar-cta">Launch module &rarr;</span>
+    </a>
+
+    <a class="pillar-card enabled" href="/deployment">
+        <span class="pillar-badge enabled">Config</span>
+        <h2>Deployment Tree Validation</h2>
+        <p>Recursively validate a Facility &rarr; Zone &rarr; Sub-Zone &rarr; Device configuration tree.</p>
+        <span class="pillar-cta">Launch module &rarr;</span>
+    </a>
+</div>
+
+<style>
+    .hero {
+        margin-bottom: 2rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid var(--sx-border);
+    }
+
+    .hero-kicker {
+        font-family: var(--sx-font-mono);
+        color: var(--sx-cyan);
+        font-size: 0.8rem;
+        letter-spacing: 0.15em;
+        margin-bottom: 0.5rem;
+        opacity: 0.85;
+    }
+
+    .hero h1 {
+        font-size: 2.4rem;
+        font-weight: 900;
+        margin: 0 0 0.6rem;
+        color: #f2fbff;
+        letter-spacing: 0.03em;
+    }
+
+    .hero-accent {
+        color: var(--sx-cyan);
+        text-shadow: 0 0 24px rgba(0, 229, 255, 0.55);
+    }
+
+    .hero p {
+        color: var(--sx-text-dim);
+        max-width: 62ch;
+        font-size: 1.05rem;
+    }
+
+    .pillar-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 1.1rem;
+    }
+
+    .pillar-card {
+        display: block;
+        border-radius: var(--sx-radius);
+        padding: 1.4rem;
+        text-decoration: none;
+        color: inherit;
+        position: relative;
+        overflow: hidden;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    .pillar-card.enabled {
+        background: var(--sx-surface);
+        backdrop-filter: blur(10px);
+        border: 1px solid var(--sx-border);
+    }
+
+    .pillar-card.enabled:hover {
+        border-color: var(--sx-border-strong);
+        box-shadow: var(--sx-glow-cyan);
+        transform: translateY(-3px);
+    }
+
+    .pillar-card.enabled::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(0, 229, 255, 0.08), transparent 60%);
+        pointer-events: none;
+    }
+
+    .pillar-card.disabled {
+        background: rgba(10, 13, 22, 0.55);
+        border: 1px dashed rgba(124, 138, 168, 0.25);
+        opacity: 0.65;
+        cursor: not-allowed;
+    }
+
+    .pillar-badge {
+        display: inline-block;
+        font-family: var(--sx-font-mono);
+        font-size: 0.68rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 0.25rem 0.6rem;
+        border-radius: 999px;
+        margin-bottom: 0.75rem;
+    }
+
+    .pillar-badge.enabled {
+        background: rgba(34, 255, 176, 0.12);
+        color: var(--sx-green);
+        border: 1px solid rgba(34, 255, 176, 0.35);
+    }
+
+    .pillar-badge.disabled {
+        background: rgba(124, 138, 168, 0.1);
+        color: var(--sx-text-faint);
+        border: 1px solid rgba(124, 138, 168, 0.2);
+    }
+
+    .pillar-card h2 {
+        font-family: var(--sx-font-display);
+        font-size: 1.05rem;
+        font-weight: 700;
+        margin: 0 0 0.5rem;
+        letter-spacing: 0.01em;
+    }
+
+    .pillar-card p {
+        font-size: 0.92rem;
+        color: var(--sx-text-dim);
+        margin: 0 0 0.75rem;
+        line-height: 1.4;
+    }
+
+    .pillar-cta {
+        font-family: var(--sx-font-mono);
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--sx-cyan);
+    }
+
+    .pillar-card.disabled .pillar-cta {
+        color: var(--sx-text-faint);
+    }
+</style>

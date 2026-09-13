@@ -1,0 +1,19 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: src/SmartX.Api/Dockerfile
+    ports:
+      - "5190:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ClientOrigins__0=http://localhost:8080
+
+  client:
+    build:
+      context: .
+      dockerfile: src/SmartX.Client/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - api

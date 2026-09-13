@@ -1,0 +1,26 @@
+@* Renders itself recursively for each child - the UI mirrors the same recursive shape as DeploymentTreeValidator on the server. *@
+<li class="node node-@Node.Kind.ToString().ToLowerInvariant()">
+    <span class="node-label">
+        <strong>@Node.Name</strong>
+        <span class="node-kind">@Node.Kind</span>
+        @if (!string.IsNullOrWhiteSpace(Node.MacAddress))
+        {
+            <span class="node-mac">@Node.MacAddress</span>
+        }
+    </span>
+
+    @if (Node.Children.Count > 0)
+    {
+        <ul>
+            @foreach (var child in Node.Children)
+            {
+                <DeploymentNodeView Node="child" />
+            }
+        </ul>
+    }
+</li>
+
+@code {
+    [Parameter, EditorRequired]
+    public required DeploymentNode Node { get; set; }
+}
