@@ -1,0 +1,23 @@
+@* Shown on any page when a call to the API fails, instead of letting the
+   exception bubble up and crash the whole Blazor app. *@
+@if (!string.IsNullOrWhiteSpace(Message))
+{
+    <div class="api-error" role="alert">
+        <strong>API problem:</strong> @Message
+        @if (OnRetry.HasDelegate)
+        {
+            <button class="api-error-retry" @onclick="OnRetry">Retry</button>
+        }
+    </div>
+}
+
+<style>
+    .api-error { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; padding: 0.65rem 0.9rem; margin-bottom: 1rem; border-radius: 8px; background: rgba(255, 59, 96, 0.08); border: 1px solid rgba(255, 59, 96, 0.35); color: var(--sx-red); font-size: 0.9rem; }
+    .api-error strong { font-weight: 700; }
+    .api-error-retry { margin-left: auto; border: 1px solid rgba(255, 59, 96, 0.5); background: transparent; color: var(--sx-red); border-radius: 6px; padding: 0.25rem 0.7rem; cursor: pointer; font-weight: 600; }
+</style>
+
+@code {
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
+}

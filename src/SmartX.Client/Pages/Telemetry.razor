@@ -8,6 +8,8 @@
 <h1>Sensor Data Ingestion &amp; Telemetry</h1>
 <p class="page-lead">Push readings into the API and watch the live Telemetry Pulse - a scrolling, severity-coded event feed synced to an animated grid-load heatmap, not just a progress bar.</p>
 
+<ApiErrorBanner Message="@_error" OnRetry="OnInitializedAsync" />
+
 <div class="toolbar">
     <button class="btn" @onclick="SeedOnceAsync" disabled="@_seeding">
         @(_seeding ? "Seeding..." : "Seed 15 mock readings")
@@ -211,6 +213,7 @@
     private int _sessionCount;
     private bool _seeding;
     private bool _sending;
+    private string? _error;
     private CancellationTokenSource? _liveCts;
 
     private Guid _selectedSensorId;
@@ -221,22 +224,41 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _sensors = await Api.GetSensorsAsync();
-        if (_sensors.Count > 0)
+        try
         {
-            _selectedSensorId = _sensors[0].Id;
-        }
+            _sensors = await Api.GetSensorsAsync();
+            if (_sensors.Count > 0 && _sensors.All(s => s.Id != _selectedSensorId))
+            {
+                _selectedSensorId = _sensors[0].Id;
+            }
 
-        await RefreshFeedAndGridAsync();
+            await RefreshFeedAndGridAsync();
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = SmartXApiClient.DescribeError(ex);
+        }
     }
 
     private async Task SeedOnceAsync()
     {
         _seeding = true;
-        var events = await Api.SeedTelemetryAsync(15);
-        _sessionCount += events.Count;
-        await RefreshFeedAndGridAsync();
-        _seeding = false;
+        try
+        {
+            var events = await Api.SeedTelemetryAsync(15);
+            _sessionCount += events.Count;
+            await RefreshFeedAndGridAsync();
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = SmartXApiClient.DescribeError(ex);
+        }
+        finally
+        {
+            _seeding = false;
+        }
     }
 
     private void ToggleLive()
@@ -263,9 +285,12 @@
                 _sessionCount += events.Count;
                 await RefreshFeedAndGridAsync();
             }
-            catch
+            catch (Exception ex)
             {
-                // Transient network hiccup - the loop just tries again on the next tick.
+                // Transient network hiccup - show it, and the loop just tries
+                // again on the next tick instead of stopping.
+                _error = SmartXApiClient.DescribeError(ex);
+                await InvokeAsync(StateHasChanged);
             }
 
             try
@@ -283,6 +308,7 @@
     {
         _feed = await Api.GetFeedAsync(25);
         _grid = await Api.GetGridSnapshotAsync();
+        _error = null;
         await InvokeAsync(StateHasChanged);
     }
 
@@ -307,11 +333,20 @@
             _ => throw new InvalidOperationException()
         };
 
-        await Api.IngestTelemetryAsync(request);
-        _sessionCount++;
-        await RefreshFeedAndGridAsync();
-
-        _sending = false;
+        try
+        {
+            await Api.IngestTelemetryAsync(request);
+            _sessionCount++;
+            await RefreshFeedAndGridAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = SmartXApiClient.DescribeError(ex);
+        }
+        finally
+        {
+            _sending = false;
+        }
     }
 
     private double GaugeTotalWatts => _grid?.LatestWattsByZone.Sum() ?? 0;

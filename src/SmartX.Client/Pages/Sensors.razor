@@ -7,6 +7,8 @@
 <h1>Sensor Payload Management</h1>
 <p class="page-lead">Register a Smart-X device and attach its config export, deployment photo, or hardware log.</p>
 
+<ApiErrorBanner Message="@_loadError" OnRetry="RefreshAsync" />
+
 <div class="layout">
     <EditForm Model="_form" OnValidSubmit="RegisterAsync" class="sx-card">
         <DataAnnotationsValidator />
@@ -165,14 +167,26 @@
     private bool _submitting;
     private string? _error;
     private string? _success;
+    private string? _loadError;
 
     protected override async Task OnInitializedAsync() => await RefreshAsync();
 
     private async Task RefreshAsync()
     {
         _loading = true;
-        _sensors = await Api.GetSensorsAsync();
-        _loading = false;
+        try
+        {
+            _sensors = await Api.GetSensorsAsync();
+            _loadError = null;
+        }
+        catch (Exception ex)
+        {
+            _loadError = SmartXApiClient.DescribeError(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
     private async Task RegisterAsync()
@@ -181,38 +195,58 @@
         _error = null;
         _success = null;
 
-        var (success, error) = await Api.RegisterSensorAsync(new RegisterSensorRequest
+        try
         {
-            MacAddress = _form.MacAddress.Trim(),
-            FacilityName = _form.FacilityName.Trim(),
-            ZoneName = _form.ZoneName.Trim(),
-            SubZoneName = string.IsNullOrWhiteSpace(_form.SubZoneName) ? null : _form.SubZoneName.Trim(),
-            NodeId = _form.NodeId.Trim(),
-            Category = _form.Category
-        });
+            var (success, error) = await Api.RegisterSensorAsync(new RegisterSensorRequest
+            {
+                MacAddress = _form.MacAddress.Trim(),
+                FacilityName = _form.FacilityName.Trim(),
+                ZoneName = _form.ZoneName.Trim(),
+                SubZoneName = string.IsNullOrWhiteSpace(_form.SubZoneName) ? null : _form.SubZoneName.Trim(),
+                NodeId = _form.NodeId.Trim(),
+                Category = _form.Category
+            });
 
-        if (success)
-        {
-            _success = $"Registered '{_form.NodeId}'.";
-            _form.Reset();
-            await RefreshAsync();
+            if (success)
+            {
+                _success = $"Registered '{_form.NodeId}'.";
+                _form.Reset();
+                await RefreshAsync();
+            }
+            else
+            {
+                _error = error ?? "Registration failed.";
+            }
         }
-        else
+        catch (Exception ex)
         {
-            _error = error ?? "Registration failed.";
+            _error = SmartXApiClient.DescribeError(ex);
         }
-
-        _submitting = false;
+        finally
+        {
+            _submitting = false;
+        }
     }
 
     private async Task UploadAsync(Guid sensorId, InputFileChangeEventArgs args)
     {
         const long maxBytes = 25 * 1024 * 1024;
         var file = args.File;
+        _error = null;
 
-        await using var stream = file.OpenReadStream(maxBytes);
-        await Api.UploadAttachmentAsync(sensorId, stream, file.Name, file.ContentType);
-        await RefreshAsync();
+        try
+        {
+            await using var stream = file.OpenReadStream(maxBytes);
+            await Api.UploadAttachmentAsync(sensorId, stream, file.Name, file.ContentType);
+            _success = $"Uploaded '{file.Name}'.";
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            // Covers both API rejections (e.g. disallowed file type) and a
+            // file over the 25 MB browser-side read limit.
+            _error = $"Upload failed: {SmartXApiClient.DescribeError(ex)}";
+        }
     }
 
     private sealed class RegisterSensorForm

@@ -30,6 +30,12 @@ public sealed class TelemetryStore : ITelemetryStore
     private readonly ConcurrentDictionary<string, bool> _lastBoolByKey = new();
     private readonly ConcurrentDictionary<string, MeterReading> _lastMeterByNode = new();
 
+    // Running per-node aggregate: every power reading for a node is folded in
+    // with the overloaded '+' operator as it arrives, alongside a sample count
+    // and the most recent delta (latest - previous, via the overloaded '-').
+    private readonly Dictionary<string, (MeterReading Total, int Count, double LastDelta)> _aggregateByNode = new();
+    private readonly object _aggregateLock = new();
+
     private readonly ConcurrentQueue<TelemetryEventDto> _feed = new();
     private const int FeedCapacity = 60;
 
@@ -78,6 +84,12 @@ public sealed class TelemetryStore : ITelemetryStore
         // just a display gimmick.
         var delta = reading - previous;
         _lastMeterByNode[nodeId] = reading;
+
+        lock (_aggregateLock)
+        {
+            var current = _aggregateByNode.GetValueOrDefault(nodeId, (new MeterReading(nodeId, 0), 0, 0));
+            _aggregateByNode[nodeId] = (current.Total + reading, current.Count + 1, delta.Watts);
+        }
 
         var severity = Math.Abs(delta.Watts) switch
         {
@@ -130,25 +142,21 @@ public sealed class TelemetryStore : ITelemetryStore
 
     public AggregateResultDto GetAggregate(string nodeId)
     {
-        if (!_lastMeterByNode.TryGetValue(nodeId, out var latest))
+        lock (_aggregateLock)
         {
-            return new AggregateResultDto { NodeId = nodeId, TotalWatts = 0, DeltaFromPreviousWatts = 0, SampleCount = 0 };
+            if (!_aggregateByNode.TryGetValue(nodeId, out var aggregate))
+            {
+                return new AggregateResultDto { NodeId = nodeId, TotalWatts = 0, DeltaFromPreviousWatts = 0, SampleCount = 0 };
+            }
+
+            return new AggregateResultDto
+            {
+                NodeId = nodeId,
+                TotalWatts = aggregate.Total.Watts,
+                DeltaFromPreviousWatts = aggregate.LastDelta,
+                SampleCount = aggregate.Count
+            };
         }
-
-        var sampleCount = _intReadings.Count(p => p.SensorType == nodeId || true);
-        var allForNode = _lastMeterByNode.Values.Where(m => m.NodeId == nodeId).ToList();
-
-        // Combine every reading recorded for this node with the overloaded
-        // '+' operator to demonstrate direct aggregation (Meter3 = Meter1 + Meter2).
-        var total = allForNode.Aggregate(new MeterReading(nodeId, 0), (acc, next) => acc + next);
-
-        return new AggregateResultDto
-        {
-            NodeId = nodeId,
-            TotalWatts = total.Watts,
-            DeltaFromPreviousWatts = latest.Watts,
-            SampleCount = sampleCount
-        };
     }
 
     public GridSnapshotDto GetGridSnapshot()

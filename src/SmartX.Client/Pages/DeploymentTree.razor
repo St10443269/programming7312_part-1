@@ -7,6 +7,8 @@
 <h1>Network Deployment &amp; Configuration Tree</h1>
 <p class="page-lead">Multi-tier profiles nest arbitrarily deep (Facility &rarr; Zone &rarr; Sub-Zone &rarr; Device), so the API walks the tree with a <strong class="accent">recursive</strong> validator rather than a flat loop.</p>
 
+<ApiErrorBanner Message="@_error" />
+
 <div class="toolbar">
     <button class="btn" @onclick="LoadValidSampleAsync">Load valid sample</button>
     <button class="btn" @onclick="LoadBrokenSample">Load broken sample</button>
@@ -104,11 +106,20 @@
     private List<ValidationIssue>? _issues;
     private bool _isValid;
     private bool _validating;
+    private string? _error;
 
     private async Task LoadValidSampleAsync()
     {
-        _tree = await Api.GetSampleDeploymentTreeAsync();
-        _issues = null;
+        try
+        {
+            _tree = await Api.GetSampleDeploymentTreeAsync();
+            _issues = null;
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = SmartXApiClient.DescribeError(ex);
+        }
     }
 
     private void LoadBrokenSample()
@@ -169,7 +180,18 @@
         }
 
         _validating = true;
-        (_isValid, _issues) = await Api.ValidateDeploymentTreeAsync(_tree);
-        _validating = false;
+        try
+        {
+            (_isValid, _issues) = await Api.ValidateDeploymentTreeAsync(_tree);
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = SmartXApiClient.DescribeError(ex);
+        }
+        finally
+        {
+            _validating = false;
+        }
     }
 }
