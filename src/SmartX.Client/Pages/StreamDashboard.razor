@@ -1,0 +1,331 @@
+@page "/stream"
+@implements IDisposable
+@inject LiveDashboardState Live
+@inject SmartXApiClient Api
+
+<PageTitle>Live Command Stream</PageTitle>
+
+<div class="page-kicker">// PART 2 &middot; REAL-TIME COMMAND STREAM</div>
+<h1>Live Device Dashboard</h1>
+<p class="page-lead">
+    Readings from the simulated ESP32 network arrive over a Server-Sent Events stream and update this page without a refresh.
+    Switch devices with the override buttons; search and filter to find a device quickly.
+</p>
+
+<ApiErrorBanner Message="@_error" />
+
+@if (Live.ConnectionState != LiveConnectionState.Connected)
+{
+    <div class="sx-feedback sx-feedback-rejected">
+        @(Live.ConnectionState == LiveConnectionState.Connecting ? "Connecting to the live stream..." : $"Live stream lost - reconnecting (attempt {Live.ReconnectAttempts}). {Live.ConnectionError}")
+        Data shown below may be out of date.
+    </div>
+}
+
+<div class="stats">
+    <div class="stat"><span class="stat-value">@Live.Devices.Count</span><span class="stat-label">Devices</span></div>
+    <div class="stat stat-active"><span class="stat-value">@Count(DeviceStatus.Active)</span><span class="stat-label">Active</span></div>
+    <div class="stat stat-fault"><span class="stat-value">@Count(DeviceStatus.Fault)</span><span class="stat-label">With alerts</span></div>
+    <div class="stat stat-disconnected"><span class="stat-value">@Count(DeviceStatus.Disconnected)</span><span class="stat-label">Disconnected</span></div>
+    <div class="stat"><span class="stat-value">@(Live.Processing?.PriorityQueueDepth ?? 0) / @(Live.Processing?.NormalQueueDepth ?? 0)</span><span class="stat-label">Priority / normal queued</span></div>
+    <div class="stat sim">
+        <span class="stat-label">Device simulator</span>
+        @if (_simulator is null)
+        {
+            <span class="muted small">unknown</span>
+        }
+        else
+        {
+            <button class="sx-btn sx-btn-small @(_simulator.IsRunning ? "sx-btn-danger" : "")" @onclick="ToggleSimulatorAsync">
+                @(_simulator.IsRunning ? "Stop simulator" : "Start simulator")
+            </button>
+        }
+    </div>
+</div>
+
+<div class="dashboard">
+    <section class="sx-card">
+        <div class="sx-card-head">
+            <h2>Devices</h2>
+            <span class="muted small">@_visibleDevices.Count of @Live.Devices.Count shown</span>
+        </div>
+
+        @* Filters live in LiveDashboardState, so they are still set when you come back to this page. *@
+        <form class="sx-toolbar" @onsubmit="ApplyFilterAsync" @onsubmit:preventDefault>
+            <label>
+                Search
+                <input class="sx-input" placeholder="Name, MAC, zone, error..." @bind="Filter.Search" />
+            </label>
+            <label>
+                Kind
+                <select class="sx-input" @bind="KindValue" @bind:after="ApplyFilterAsync">
+                    <option value="">Any</option>
+                    @foreach (var kind in Enum.GetValues<DeviceKind>())
+                    {
+                        <option value="@kind">@kind</option>
+                    }
+                </select>
+            </label>
+            <label>
+                Category
+                <select class="sx-input" @bind="CategoryValue" @bind:after="ApplyFilterAsync">
+                    <option value="">Any</option>
+                    @foreach (var category in Enum.GetValues<SensorCategory>())
+                    {
+                        <option value="@category">@category</option>
+                    }
+                </select>
+            </label>
+            <label>
+                Status
+                <select class="sx-input" @bind="StatusValue" @bind:after="ApplyFilterAsync">
+                    <option value="">Any</option>
+                    @foreach (var status in Enum.GetValues<DeviceStatus>())
+                    {
+                        <option value="@status">@status</option>
+                    }
+                </select>
+            </label>
+            <label class="sx-check">
+                <input type="checkbox" @bind="Filter.AlertsOnly" @bind:after="ApplyFilterAsync" /> Alerts only
+            </label>
+            <button type="submit" class="sx-btn-primary">Search</button>
+            <button type="button" class="sx-btn" @onclick="ClearFilterAsync" disabled="@Filter.IsEmpty">Clear</button>
+        </form>
+
+        @if (_searchNote is not null)
+        {
+            <p class="small muted">@_searchNote</p>
+        }
+
+        @if (Live.Devices.Count == 0)
+        {
+            <p class="sx-empty">@(Live.ConnectionState == LiveConnectionState.Connected ? "No devices registered." : "Waiting for device data from the API...")</p>
+        }
+        else if (_visibleDevices.Count == 0)
+        {
+            <p class="sx-empty">No devices match these filters.</p>
+        }
+        else
+        {
+            <div class="device-grid">
+                @foreach (var device in _visibleDevices)
+                {
+                    <DeviceCard @key="device.MacAddress" Device="device" Busy="_sending" OnCommand="SendCommandAsync" />
+                }
+            </div>
+        }
+
+        <CommandFeedback Record="_lastCommand" Error="@_commandError" />
+    </section>
+
+    <aside class="sx-stack">
+        <section class="sx-card">
+            <div class="sx-card-head">
+                <h2>Active errors</h2>
+                <span class="sx-pill sx-pill-muted">HashSet</span>
+                <a class="small sx-right" href="stream/processing">details &rarr;</a>
+            </div>
+            @if (Live.ActiveErrors.Count == 0)
+            {
+                <p class="muted small">No active errors.</p>
+            }
+            else
+            {
+                <ul class="errors">
+                    @foreach (var error in Live.ActiveErrors)
+                    {
+                        <li>
+                            <span class="sx-pill sx-pill-critical">@error.Code</span>
+                            <strong>@error.DeviceName</strong>
+                            @if (error.SuppressedDuplicates > 0)
+                            {
+                                <span class="small muted" title="Repeat reports ignored because the error was already active">+@error.SuppressedDuplicates duplicates suppressed</span>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+
+        <section class="sx-card">
+            <div class="sx-card-head">
+                <h2>Live event stream</h2>
+                <span class="small muted sx-right">@Live.MessagesReceived msgs</span>
+            </div>
+            @if (Live.RecentEvents.Count == 0)
+            {
+                <p class="muted small">Waiting for events...</p>
+            }
+            else
+            {
+                <ul class="events">
+                    @foreach (var entry in Live.RecentEvents.Take(14))
+                    {
+                        <li @key="entry.Sequence" class="event-@entry.Severity.ToString().ToLowerInvariant()">
+                            <span class="mono small muted">@entry.TimestampUtc.ToLocalTime().ToString("HH:mm:ss")</span>
+                            <span class="sx-pill sx-pill-@entry.Kind.ToString().ToLowerInvariant()">@entry.Kind</span>
+                            <span class="event-text"><strong>@entry.DeviceName</strong> @entry.Text</span>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+
+        <SuggestedActionsPanel Compact="true" MaxItems="3" />
+    </aside>
+</div>
+
+<style>
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem; }
+    .stat { background: var(--sx-surface); border: 1px solid var(--sx-border); border-radius: var(--sx-radius); padding: 0.7rem 0.85rem; display: flex; flex-direction: column; gap: 0.2rem; }
+    .stat-value { font-family: var(--sx-font-mono); font-size: 1.4rem; color: var(--sx-cyan); }
+    .stat-label { font-size: 0.75rem; color: var(--sx-text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-active .stat-value { color: var(--sx-green); }
+    .stat-fault .stat-value { color: var(--sx-amber); }
+    .stat-disconnected .stat-value { color: var(--sx-red); }
+    .stat.sim { justify-content: space-between; align-items: flex-start; }
+
+    .dashboard { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); gap: 1.25rem; align-items: start; }
+    .device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 0.85rem; }
+
+    ul.errors, ul.events { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.45rem; }
+    ul.errors li { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; font-size: 0.88rem; }
+    ul.events li { display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.82rem; padding-left: 0.5rem; border-left: 2px solid transparent; }
+    ul.events li.event-critical { border-left-color: var(--sx-red); }
+    ul.events li.event-warning { border-left-color: var(--sx-amber); }
+    .event-text { flex: 1; }
+
+    @@media (max-width: 1100px) {
+        .dashboard { grid-template-columns: 1fr; }
+    }
+</style>
+
+@code {
+    private List<DeviceDto> _visibleDevices = [];
+    private SimulatorStatusDto? _simulator;
+    private bool _sending;
+    private string? _error;
+    private string? _searchNote;
+    private CommandRecordDto? _lastCommand;
+    private string? _commandError;
+
+    private DeviceQuery Filter => Live.DeviceFilter;
+
+    // <select> binds to strings; "" means "no filter".
+    private string KindValue
+    {
+        get => Filter.Kind?.ToString() ?? "";
+        set => Filter.Kind = Enum.TryParse<DeviceKind>(value, out var kind) ? kind : null;
+    }
+
+    private string CategoryValue
+    {
+        get => Filter.Category?.ToString() ?? "";
+        set => Filter.Category = Enum.TryParse<SensorCategory>(value, out var category) ? category : null;
+    }
+
+    private string StatusValue
+    {
+        get => Filter.Status?.ToString() ?? "";
+        set => Filter.Status = Enum.TryParse<DeviceStatus>(value, out var status) ? status : null;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Live.Changed += OnLiveChanged;
+        RecomputeVisible();
+
+        try
+        {
+            _simulator = await Api.GetSimulatorStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = SmartXApiClient.DescribeError(ex);
+        }
+    }
+
+    private void OnLiveChanged()
+    {
+        // Re-apply the same filter to the latest live data, so a device that
+        // e.g. becomes Disconnected drops in or out of a status filter by itself.
+        RecomputeVisible();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void RecomputeVisible() => _visibleDevices = Live.Devices.Where(Filter.Matches).ToList();
+
+    /// <summary>
+    /// Runs the search on the API as well: it returns the matches and records
+    /// the search in history, which the recommendation engine learns from.
+    /// </summary>
+    private async Task ApplyFilterAsync()
+    {
+        RecomputeVisible();
+        if (Filter.IsEmpty)
+        {
+            _searchNote = null;
+            return;
+        }
+
+        try
+        {
+            var matches = await Api.SearchDevicesAsync(Filter, record: true);
+            _searchNote = $"API search {Filter.Describe()} matched {matches.Count} device(s) - recorded in search history.";
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _searchNote = "Filtered locally; the API search could not be recorded.";
+            _error = SmartXApiClient.DescribeError(ex);
+        }
+    }
+
+    private async Task ClearFilterAsync()
+    {
+        Filter.Search = null;
+        Filter.Kind = null;
+        Filter.Category = null;
+        Filter.Status = null;
+        Filter.AlertsOnly = false;
+        await ApplyFilterAsync();
+    }
+
+    private async Task SendCommandAsync((DeviceDto Device, CommandAction Action) request)
+    {
+        _sending = true;
+        _commandError = null;
+        try
+        {
+            _lastCommand = await Api.SendCommandAsync(new DeviceCommandRequest { MacAddress = request.Device.MacAddress, Action = request.Action });
+            Live.ApplyLocal(_lastCommand);
+        }
+        catch (Exception ex)
+        {
+            _lastCommand = null;
+            _commandError = SmartXApiClient.DescribeError(ex);
+        }
+        finally
+        {
+            _sending = false;
+        }
+    }
+
+    private async Task ToggleSimulatorAsync()
+    {
+        try
+        {
+            _simulator = await Api.SetSimulatorRunningAsync(!(_simulator?.IsRunning ?? false));
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = SmartXApiClient.DescribeError(ex);
+        }
+    }
+
+    private int Count(DeviceStatus status) => Live.Devices.Count(d => d.Status == status);
+
+    public void Dispose() => Live.Changed -= OnLiveChanged;
+}

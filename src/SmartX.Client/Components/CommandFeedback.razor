@@ -1,0 +1,18 @@
+@* Shows whether the last command was accepted, rejected or failed, and why. *@
+@if (Record is not null)
+{
+    <div class="sx-feedback sx-feedback-@Record.Outcome.ToString().ToLowerInvariant()" role="status">
+        <strong>@(Record.IsUndo ? "Undo" : "Command") @Record.Outcome.ToString().ToLowerInvariant():</strong>
+        @Record.Message
+        <span class="small muted"> &middot; @Record.IssuedAtUtc.ToLocalTime().ToString("HH:mm:ss")</span>
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(Error))
+{
+    <div class="sx-feedback sx-feedback-failed" role="alert"><strong>Request failed:</strong> @Error</div>
+}
+
+@code {
+    [Parameter] public CommandRecordDto? Record { get; set; }
+    [Parameter] public string? Error { get; set; }
+}

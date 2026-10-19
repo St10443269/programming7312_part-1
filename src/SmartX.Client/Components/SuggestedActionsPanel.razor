@@ -1,0 +1,183 @@
+@implements IDisposable
+@inject SmartXApiClient Api
+@inject LiveDashboardState Live
+
+@* "Suggested Actions" from the API's recommendation engine. Suggestions are
+   never executed automatically: a suggested command only runs if the user
+   presses its button. Refreshes itself every few seconds. *@
+
+<div class="sx-card">
+    <div class="sx-card-head">
+        <h2>Suggested Actions</h2>
+        <span class="sx-pill sx-pill-muted">Automated insights</span>
+        <button class="sx-btn sx-btn-small sx-right" @onclick="RefreshAsync" disabled="@_loading">@(_loading ? "Refreshing..." : "Refresh")</button>
+    </div>
+
+    <ApiErrorBanner Message="@_error" OnRetry="RefreshAsync" />
+
+    @if (_report is null)
+    {
+        <p class="muted">@(_loading ? "Analysing history..." : "No insights loaded.")</p>
+    }
+    else
+    {
+        <p class="summary @(_report.HasEnoughPatternData ? "" : "not-enough")">@_report.Summary</p>
+
+        @if (_report.Recommendations.Count == 0)
+        {
+            <p class="sx-empty">No issues or patterns detected right now.</p>
+        }
+        else
+        {
+            <ul class="recs">
+                @foreach (var rec in _report.Recommendations.Take(MaxItems))
+                {
+                    <li class="rec rec-@rec.Type.ToLowerInvariant()">
+                        <div class="rec-head">
+                            <span class="sx-pill @TypeClass(rec.Type)">@TypeLabel(rec.Type)</span>
+                            <strong>@rec.DeviceName</strong>
+                            <span class="small muted mono rec-score" title="Ranking score">score @rec.Score.ToString("0")</span>
+                        </div>
+                        <div class="rec-issue">@rec.Issue</div>
+                        @if (!Compact)
+                        {
+                            <div class="rec-reason"><span class="label">Why:</span> @rec.Reason</div>
+                            @if (!string.IsNullOrWhiteSpace(rec.Evidence))
+                            {
+                                <div class="rec-evidence small muted"><span class="label">Data:</span> @rec.Evidence</div>
+                            }
+                        }
+                        <div class="rec-action"><span class="label">Suggested:</span> @rec.SuggestedAction</div>
+                        @if (rec.SuggestedCommand is { } command)
+                        {
+                            <button class="sx-btn sx-btn-small" disabled="@_sending" @onclick="() => ApplyAsync(command)">
+                                @(command.Action == CommandAction.TurnOn ? "Turn on" : "Turn off") @(Live.FindDevice(command.MacAddress)?.Name ?? command.MacAddress)
+                            </button>
+                        }
+                    </li>
+                }
+            </ul>
+
+            @if (Compact && _report.Recommendations.Count > MaxItems)
+            {
+                <a class="small" href="stream/insights">See all @_report.Recommendations.Count suggestions &rarr;</a>
+            }
+        }
+
+        <CommandFeedback Record="_lastCommand" Error="@_commandError" />
+    }
+</div>
+
+<style>
+    .summary { font-size: 0.85rem; color: var(--sx-text-dim); margin: 0 0 0.75rem; }
+    .summary.not-enough { color: var(--sx-amber); }
+    ul.recs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+    .rec { padding: 0.65rem 0.75rem; border-radius: 8px; border: 1px solid var(--sx-border); background: rgba(255,255,255,0.02); display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.88rem; align-items: flex-start; }
+    .rec-pattern { border-color: rgba(180, 91, 255, 0.45); }
+    .rec-recurringfault, .rec-outofrange { border-color: rgba(255, 176, 32, 0.35); }
+    .rec-disconnected { border-color: rgba(255, 59, 96, 0.35); }
+    .rec-head { display: flex; gap: 0.5rem; align-items: center; width: 100%; flex-wrap: wrap; }
+    .rec-score { margin-left: auto; }
+    .rec-issue { font-weight: 600; }
+    .label { color: var(--sx-text-faint); font-family: var(--sx-font-mono); font-size: 0.72rem; text-transform: uppercase; margin-right: 0.25rem; }
+    .sx-pill-pattern { color: var(--sx-purple); }
+</style>
+
+@code {
+    /// <summary>Compact mode (dashboard) hides the "why" details and shows fewer items.</summary>
+    [Parameter] public bool Compact { get; set; }
+    [Parameter] public int MaxItems { get; set; } = 20;
+
+    private RecommendationReportDto? _report;
+    private bool _loading;
+    private bool _sending;
+    private string? _error;
+    private CommandRecordDto? _lastCommand;
+    private string? _commandError;
+    private CancellationTokenSource? _cts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        _cts = new CancellationTokenSource();
+        _ = AutoRefreshAsync(_cts.Token);
+    }
+
+    private async Task AutoRefreshAsync(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                await RefreshAsync();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Left the page.
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        try
+        {
+            _report = await Api.GetInsightsAsync();
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = SmartXApiClient.DescribeError(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ApplyAsync(DeviceCommandRequest command)
+    {
+        _sending = true;
+        _commandError = null;
+        try
+        {
+            _lastCommand = await Api.SendCommandAsync(command);
+            Live.ApplyLocal(_lastCommand);
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            _lastCommand = null;
+            _commandError = SmartXApiClient.DescribeError(ex);
+        }
+        finally
+        {
+            _sending = false;
+        }
+    }
+
+    private static string TypeLabel(string type) => type switch
+    {
+        "Pattern" => "Pattern",
+        "RecurringFault" => "Recurring fault",
+        "OutOfRange" => "Out of range",
+        "Disconnected" => "Offline",
+        _ => type
+    };
+
+    private static string TypeClass(string type) => type switch
+    {
+        "Pattern" => "sx-pill-pattern",
+        "Disconnected" => "sx-pill-critical",
+        _ => "sx-pill-warning"
+    };
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}
