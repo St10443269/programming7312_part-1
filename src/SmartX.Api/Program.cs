@@ -37,6 +37,12 @@ var realTimeOptions = builder.Configuration.GetSection("RealTime").Get<RealTimeO
 builder.Services.AddSingleton(realTimeOptions);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<DeviceRegistry>();
+builder.Services.AddSingleton<HistoryLog>();
+builder.Services.AddSingleton<ActiveErrorTracker>();
+builder.Services.AddSingleton<TelemetryClassifier>();
+builder.Services.AddSingleton<LiveUpdateBroadcaster>();
+builder.Services.AddSingleton<TelemetryProcessor>();
+builder.Services.AddHostedService<ProcessingWorker>();
 
 var app = builder.Build();
 
@@ -54,5 +60,6 @@ app.MapGet("/", () => Results.Ok(new { service = "Smart-X Ingestion API", status
 app.MapGroup("/api/sensors").MapSensorEndpoints();
 app.MapGroup("/api/telemetry").MapTelemetryEndpoints();
 app.MapGroup("/api/deployment").MapDeploymentEndpoints();
+app.MapGroup("/api/stream").MapStreamEndpoints();
 
 app.Run();

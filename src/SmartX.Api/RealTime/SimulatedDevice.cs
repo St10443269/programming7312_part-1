@@ -124,6 +124,8 @@ public sealed class SimulatedDevice
         }
     }
 
+    public DeviceDto ToDto(ActiveErrorTracker errors) => ToDto(errors.CodesFor(MacAddress));
+
     public DeviceDto ToDto(IReadOnlyCollection<string> activeErrorCodes)
     {
         lock (_sync)
