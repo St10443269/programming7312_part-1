@@ -1,0 +1,240 @@
+@page "/stream/commands"
+@implements IDisposable
+@inject LiveDashboardState Live
+@inject SmartXApiClient Api
+
+<PageTitle>Commands &amp; Undo</PageTitle>
+
+<div class="page-kicker">// PART 2 &middot; MANUAL OVERRIDES</div>
+<h1>Device Commands &amp; Undo</h1>
+<p class="page-lead">
+    Send manual override commands to switchable devices. Every command that changes a device is pushed onto a
+    <strong>Stack</strong>, so <em>Undo</em> always reverses the most recent one first (Last-In-First-Out).
+</p>
+
+<ApiErrorBanner Message="@_error" OnRetry="LoadAsync" />
+
+<div class="sx-grid-2">
+    <section class="sx-card">
+        <h2>Send a command</h2>
+        <div class="sx-toolbar">
+            <label>
+                Target device
+                <select class="sx-input" @bind="_targetMac">
+                    @foreach (var device in Live.Devices)
+                    {
+                        <option value="@device.MacAddress">@device.Name @(device.IsControllable ? $"({(device.IsOn ? "ON" : "OFF")})" : "(read-only sensor)")</option>
+                    }
+                </select>
+            </label>
+            <label>
+                Action
+                <select class="sx-input" @bind="_action">
+                    <option value="@CommandAction.TurnOn">Turn on</option>
+                    <option value="@CommandAction.TurnOff">Turn off</option>
+                </select>
+            </label>
+            <button class="sx-btn-primary" @onclick="SendAsync" disabled="@(_busy || string.IsNullOrEmpty(_targetMac))">@(_busy ? "Sending..." : "Send")</button>
+        </div>
+
+        @if (Live.FindDevice(_targetMac) is { } target)
+        {
+            <p class="small muted">
+                Current state: <strong>@(target.IsControllable ? (target.IsOn ? "ON" : "OFF") : "sensor - cannot be switched")</strong>
+                &middot; status <span class="sx-pill sx-pill-@target.Status.ToString().ToLowerInvariant()">@target.Status</span>
+                <button class="sx-btn sx-btn-small" @onclick="() => OutageAsync(target.MacAddress)" disabled="@_busy"
+                        title="Simulator only: the device stops reporting for 20s and becomes Disconnected; commands to it then fail.">
+                    Simulate 20s outage
+                </button>
+            </p>
+        }
+
+        <CommandFeedback Record="_lastResult" Error="@_commandError" />
+    </section>
+
+    <section class="sx-card">
+        <div class="sx-card-head">
+            <h2>Undo stack</h2>
+            <span class="sx-pill sx-pill-muted">Stack&lt;T&gt; &middot; LIFO</span>
+            <button class="sx-btn sx-btn-danger sx-right" @onclick="UndoAsync" disabled="@(_busy || _stack.Count == 0)">Undo last command</button>
+        </div>
+        <p class="sx-explain">
+            Top of the stack = the command Undo will revert next. Undo restores the device's previous state only if it is
+            still in the state the command left it in; if it changed since (e.g. a newer reading shows it was switched
+            locally) the undo is refused. While a device is disconnected, undo fails and the entry stays on the stack.
+        </p>
+        @if (_stack.Count == 0)
+        {
+            <p class="sx-empty">The stack is empty - nothing to undo.</p>
+        }
+        else
+        {
+            <ol class="stack">
+                @for (var i = 0; i < _stack.Count; i++)
+                {
+                    var entry = _stack[i];
+                    <li class="@(i == 0 ? "top" : "")">
+                        <span class="mono small">@(i == 0 ? "TOP" : $"#{i + 1}")</span>
+                        <strong>@entry.DeviceName</strong> @entry.Action
+                        <span class="small muted">(@(entry.PreviousIsOn == true ? "ON" : "OFF") &rarr; @(entry.NewIsOn == true ? "ON" : "OFF"), @entry.IssuedAtUtc.ToLocalTime().ToString("HH:mm:ss"))</span>
+                    </li>
+                }
+            </ol>
+        }
+    </section>
+</div>
+
+<section class="sx-card history">
+    <div class="sx-card-head">
+        <h2>Command history</h2>
+        <span class="small muted">every command and undo attempt, newest first - including rejected and failed ones</span>
+    </div>
+    @if (_loading && _log.Count == 0)
+    {
+        <p class="muted">Loading...</p>
+    }
+    else if (_log.Count == 0)
+    {
+        <p class="sx-empty">No commands sent yet.</p>
+    }
+    else
+    {
+        <div class="sx-table-wrap">
+            <table class="sx-table">
+                <thead><tr><th>Time</th><th>Device</th><th>Action</th><th>Result</th><th>State</th><th>Details</th></tr></thead>
+                <tbody>
+                    @foreach (var record in _log)
+                    {
+                        <tr @key="record.Id">
+                            <td class="mono">@record.IssuedAtUtc.ToLocalTime().ToString("HH:mm:ss")</td>
+                            <td>@record.DeviceName</td>
+                            <td>@(record.IsUndo ? "Undo -> " : "")@record.Action</td>
+                            <td><span class="sx-pill sx-pill-@record.Outcome.ToString().ToLowerInvariant()">@record.Outcome</span></td>
+                            <td class="mono small">@(record.NewIsOn is { } on && record.PreviousIsOn is { } before ? $"{(before ? "ON" : "OFF")} -> {(on ? "ON" : "OFF")}" : "-")</td>
+                            <td class="small">@record.Message</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<style>
+    ol.stack { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+    ol.stack li { padding: 0.45rem 0.65rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); font-size: 0.88rem; display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
+    ol.stack li.top { border-color: var(--sx-border-strong); background: rgba(0, 229, 255, 0.06); }
+    ol.stack li.top .mono { color: var(--sx-cyan); }
+    .history { margin-top: 1.25rem; }
+</style>
+
+@code {
+    private string? _targetMac;
+    private CommandAction _action = CommandAction.TurnOn;
+    private List<CommandRecordDto> _stack = [];
+    private List<CommandRecordDto> _log = [];
+    private CommandRecordDto? _lastResult;
+    private string? _commandError;
+    private string? _error;
+    private bool _busy;
+    private bool _loading;
+    private Guid? _seenCommandId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Live.Changed += OnLiveChanged;
+        _targetMac = Live.Devices.FirstOrDefault(d => d.IsControllable)?.MacAddress;
+        _seenCommandId = Live.RecentCommands.FirstOrDefault()?.Id;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _stack = await Api.GetUndoStackAsync();
+            _log = await Api.GetCommandLogAsync(50);
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = SmartXApiClient.DescribeError(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OnLiveChanged()
+    {
+        _targetMac ??= Live.Devices.FirstOrDefault(d => d.IsControllable)?.MacAddress;
+
+        // A command arrived on the live stream (perhaps from another tab or
+        // from Suggested Actions) - reload the stack and history.
+        var newestId = Live.RecentCommands.FirstOrDefault()?.Id;
+        if (newestId != _seenCommandId)
+        {
+            _seenCommandId = newestId;
+            _ = InvokeAsync(async () =>
+            {
+                await LoadAsync();
+                StateHasChanged();
+            });
+            return;
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SendAsync()
+    {
+        await RunAsync(() => Api.SendCommandAsync(new DeviceCommandRequest { MacAddress = _targetMac, Action = _action }));
+    }
+
+    private async Task UndoAsync() => await RunAsync(Api.UndoLastCommandAsync);
+
+    private async Task RunAsync(Func<Task<CommandRecordDto>> call)
+    {
+        _busy = true;
+        _commandError = null;
+        try
+        {
+            _lastResult = await call();
+            Live.ApplyLocal(_lastResult);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _lastResult = null;
+            _commandError = SmartXApiClient.DescribeError(ex);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task OutageAsync(string mac)
+    {
+        _busy = true;
+        try
+        {
+            await Api.SimulateOutageAsync(mac, 20);
+            _lastResult = null;
+            _commandError = null;
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = SmartXApiClient.DescribeError(ex);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    public void Dispose() => Live.Changed -= OnLiveChanged;
+}
