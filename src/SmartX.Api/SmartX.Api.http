@@ -1,0 +1,170 @@
+# Example requests for the Smart-X API.
+# In Visual Studio (or VS Code with the REST Client extension) click
+# "Send request" above any request. Start the API first (port 5190).
+
+@api = http://localhost:5190
+@moisture = 24:6F:28:B1:00:01
+@pump = 24:6F:28:A1:00:01
+@plug = 24:6F:28:D3:00:01
+
+### Health check
+GET {{api}}/
+
+########################################################################
+# Part 2 - devices, search and filtering
+########################################################################
+
+### All devices (not recorded in search history)
+GET {{api}}/api/devices?record=false
+
+### Search by text - recorded in search history for the recommendation engine
+GET {{api}}/api/devices?search=pump
+
+### Filters can be combined: kind, category, status, alertsOnly
+GET {{api}}/api/devices?category=Actuator&status=Active
+
+### Devices with active errors only
+GET {{api}}/api/devices?alertsOnly=true
+
+### Invalid filter value -> 400 with the allowed values
+GET {{api}}/api/devices?status=Sleeping
+
+### One device by MAC (Dictionary lookup)
+GET {{api}}/api/devices/{{pump}}
+
+### Recent searches
+GET {{api}}/api/devices/searches
+
+########################################################################
+# Part 2 - telemetry intake (Queue / PriorityQueue)
+########################################################################
+
+### Normal reading -> FIFO queue (202 Accepted)
+POST {{api}}/api/stream/telemetry
+Content-Type: application/json
+
+{ "macAddress": "{{moisture}}", "sensorType": "SoilMoisturePct", "value": 45 }
+
+### Critical moisture drop (< 20%) -> priority queue, priority 0
+POST {{api}}/api/stream/telemetry
+Content-Type: application/json
+
+{ "macAddress": "{{moisture}}", "sensorType": "SoilMoisturePct", "value": 12 }
+
+### Severe power spike (> 1500 W) -> priority queue, priority 0
+POST {{api}}/api/stream/telemetry
+Content-Type: application/json
+
+{ "macAddress": "{{plug}}", "sensorType": "PowerWatts", "value": 1900 }
+
+### Late (buffered) reading with its own capture time - lands in the right place in the history
+POST {{api}}/api/stream/telemetry
+Content-Type: application/json
+
+{ "macAddress": "{{moisture}}", "sensorType": "SoilMoisturePct", "value": 40, "capturedAtUtc": "2026-10-19T08:00:00Z" }
+
+### Unknown device -> 404
+POST {{api}}/api/stream/telemetry
+Content-Type: application/json
+
+{ "macAddress": "24:6F:28:00:00:99", "sensorType": "PowerWatts", "value": 10 }
+
+### Malformed packet (missing value) -> 400
+POST {{api}}/api/stream/telemetry
+Content-Type: application/json
+
+{ "macAddress": "{{plug}}", "sensorType": "PowerWatts" }
+
+### Wrong sensor type for this device -> 400
+POST {{api}}/api/stream/telemetry
+Content-Type: application/json
+
+{ "macAddress": "{{plug}}", "sensorType": "SoilMoisturePct", "value": 40 }
+
+### Queue depths and the order recent messages were processed in
+GET {{api}}/api/stream/processing
+
+### Pause processing (messages wait in the queues)
+POST {{api}}/api/stream/processing/pause
+
+### Priority demo: 8 normal, then 1 warning, then 1 critical, queued at once
+POST {{api}}/api/stream/demo/priority-burst
+
+### Resume processing - check /processing: the critical is processed first
+POST {{api}}/api/stream/processing/resume
+
+########################################################################
+# Part 2 - commands and undo (Stack)
+########################################################################
+
+### Turn Pump A on
+POST {{api}}/api/commands
+Content-Type: application/json
+
+{ "macAddress": "{{pump}}", "action": "TurnOn" }
+
+### Turn Smart Plug 1 off
+POST {{api}}/api/commands
+Content-Type: application/json
+
+{ "macAddress": "{{plug}}", "action": "TurnOff" }
+
+### Sensors cannot be switched -> 400 Rejected
+POST {{api}}/api/commands
+Content-Type: application/json
+
+{ "macAddress": "{{moisture}}", "action": "TurnOn" }
+
+### The undo stack, top (most recent) first
+GET {{api}}/api/commands/stack
+
+### Undo the most recent command (LIFO). 409 when there is nothing to undo.
+POST {{api}}/api/commands/undo
+
+### Every command and undo attempt, newest first
+GET {{api}}/api/commands
+
+########################################################################
+# Part 2 - history (SortedDictionary), errors (HashSet), insights
+########################################################################
+
+### Chronological history for one device, last 10 minutes
+GET {{api}}/api/history?mac={{moisture}}&minutes=10&take=50
+
+### Only alerts
+GET {{api}}/api/history?kind=Alert
+
+### Active errors (each with its suppressed-duplicate count)
+GET {{api}}/api/errors
+
+### Suggested actions / automated insights
+GET {{api}}/api/insights
+
+########################################################################
+# Part 2 - simulator controls (simulation only)
+########################################################################
+
+### Simulator status
+GET {{api}}/api/simulator
+
+### Stop / start the simulator
+POST {{api}}/api/simulator/stop
+
+###
+POST {{api}}/api/simulator/start
+
+### Make Pump A stop reporting for 20 s (it becomes Disconnected after 8 s)
+POST {{api}}/api/simulator/devices/{{pump}}/disconnect?seconds=20
+
+########################################################################
+# Part 1 endpoints (unchanged)
+########################################################################
+
+### Registered sensors (includes the simulated demo network)
+GET {{api}}/api/sensors
+
+### Part 1 pulse feed
+GET {{api}}/api/telemetry/feed?take=10
+
+### Part 1 grid heatmap
+GET {{api}}/api/telemetry/grid
