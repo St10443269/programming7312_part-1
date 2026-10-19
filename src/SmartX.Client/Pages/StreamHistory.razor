@@ -1,0 +1,318 @@
+@page "/stream/history"
+@implements IDisposable
+@inject LiveDashboardState Live
+@inject SmartXApiClient Api
+
+<PageTitle>History Log</PageTitle>
+
+<div class="page-kicker">// PART 2 &middot; HISTORICAL LOG</div>
+<h1>Chronological History Log</h1>
+<p class="page-lead">
+    Every reading, command, alert and recovery is stored in a <strong>SortedDictionary</strong> keyed by
+    <code>(timestamp, sequence)</code>. It stays in time order even when readings arrive late, and two entries with the
+    same timestamp are both kept - the sequence number breaks the tie instead of one overwriting the other.
+</p>
+
+<ApiErrorBanner Message="@_error" OnRetry="LoadAsync" />
+
+<section class="sx-card">
+    <div class="sx-toolbar">
+        <label>
+            Device
+            <select class="sx-input" @bind="DeviceMac" @bind:after="LoadAsync">
+                <option value="">All devices</option>
+                @foreach (var device in Live.Devices)
+                {
+                    <option value="@device.MacAddress">@device.Name</option>
+                }
+            </select>
+        </label>
+        <label>
+            Entry type
+            <select class="sx-input" @bind="_kind" @bind:after="LoadAsync">
+                <option value="">All</option>
+                @foreach (var kind in Enum.GetValues<HistoryEntryKind>())
+                {
+                    <option value="@kind">@kind</option>
+                }
+            </select>
+        </label>
+        <label>
+            Time window
+            <select class="sx-input" @bind="_minutes" @bind:after="LoadAsync">
+                <option value="5">Last 5 min</option>
+                <option value="15">Last 15 min</option>
+                <option value="60">Last hour</option>
+                <option value="0">Everything stored</option>
+            </select>
+        </label>
+        <label class="sx-check"><input type="checkbox" @bind="_autoRefresh" /> Auto-refresh</label>
+        <button class="sx-btn" @onclick="LoadAsync" disabled="@_loading">@(_loading ? "Loading..." : "Refresh")</button>
+    </div>
+
+    @if (SelectedDevice is { } selected)
+    {
+        <div class="sx-toolbar demo">
+            <span class="small muted">Ordering demos for @selected.Name:</span>
+            <button class="sx-btn sx-btn-small" @onclick="SendSameTimestampAsync" disabled="@_loading">Send 2 readings with the same timestamp</button>
+            <button class="sx-btn sx-btn-small" @onclick="SendLateReadingAsync" disabled="@_loading">Send a late reading (captured 30s ago)</button>
+        </div>
+        @if (_demoNote is not null)
+        {
+            <p class="small" style="color: var(--sx-green)">@_demoNote</p>
+        }
+    }
+</section>
+
+@if (_chartPoints.Count >= 2)
+{
+    <section class="sx-card chart-card">
+        <div class="sx-card-head">
+            <h2>@SelectedDevice?.Name &middot; @SelectedDevice?.SensorType</h2>
+            <span class="small muted">@_chartPoints.Count readings, oldest &rarr; newest</span>
+        </div>
+        <svg viewBox="0 0 @ChartWidth @ChartHeight" class="chart" preserveAspectRatio="none" role="img" aria-label="Reading history chart">
+            <line x1="0" y1="@(ChartHeight - 1)" x2="@ChartWidth" y2="@(ChartHeight - 1)" class="axis" />
+            <polyline points="@ChartPolyline" class="line" />
+            @foreach (var point in _chartPoints.Where(p => p.Critical))
+            {
+                <circle cx="@X(point.At).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)" cy="@Y(point.Value).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)" r="3.5" class="critical" />
+            }
+        </svg>
+        <div class="chart-labels small muted mono">
+            <span>min @_chartMin.ToString("0.#") &middot; max @_chartMax.ToString("0.#") @SelectedDevice?.Unit</span>
+            <span>@_chartPoints[0].At.ToLocalTime().ToString("HH:mm:ss") &rarr; @_chartPoints[^1].At.ToLocalTime().ToString("HH:mm:ss")</span>
+        </div>
+    </section>
+}
+
+<section class="sx-card">
+    <div class="sx-card-head">
+        <h2>Entries</h2>
+        <span class="small muted">oldest first, exactly as stored &middot; showing the latest @_entries.Count</span>
+    </div>
+    @if (_loading && _entries.Count == 0)
+    {
+        <p class="muted">Loading...</p>
+    }
+    else if (_entries.Count == 0)
+    {
+        <p class="sx-empty">No history for this selection yet.</p>
+    }
+    else
+    {
+        <div class="sx-table-wrap history-table">
+            <table class="sx-table">
+                <thead><tr><th>Timestamp</th><th>Seq</th><th>Type</th><th>Device</th><th>Entry</th></tr></thead>
+                <tbody>
+                    @for (var i = 0; i < _entries.Count; i++)
+                    {
+                        var entry = _entries[i];
+                        var sameAsPrevious = i > 0 && _entries[i - 1].TimestampUtc == entry.TimestampUtc;
+                        <tr @key="entry.Sequence" class="@(sameAsPrevious ? "tie" : "") @(_highlight.Contains(entry.Sequence) ? "new-demo" : "")">
+                            <td class="mono small">@entry.TimestampUtc.ToLocalTime().ToString("HH:mm:ss.fff")</td>
+                            <td class="mono small">@entry.Sequence</td>
+                            <td><span class="sx-pill sx-pill-@entry.Kind.ToString().ToLowerInvariant()">@entry.Kind</span></td>
+                            <td>@entry.DeviceName</td>
+                            <td class="small">
+                                @entry.Text
+                                @if (sameAsPrevious)
+                                {
+                                    <span class="sx-pill sx-pill-command">same timestamp - kept</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<style>
+    .demo { margin: 0.25rem 0 0; }
+    .chart-card { margin-top: 1.25rem; }
+    .chart { width: 100%; height: 200px; display: block; }
+    .chart .axis { stroke: rgba(124, 138, 168, 0.3); stroke-width: 1; }
+    .chart .line { fill: none; stroke: var(--sx-cyan); stroke-width: 2; vector-effect: non-scaling-stroke; }
+    .chart .critical { fill: var(--sx-red); }
+    .chart-labels { display: flex; justify-content: space-between; margin-top: 0.4rem; flex-wrap: wrap; gap: 0.5rem; }
+    section.sx-card + section.sx-card { margin-top: 1.25rem; }
+    .history-table { max-height: 520px; overflow-y: auto; }
+    tr.tie td { background: rgba(0, 229, 255, 0.05); }
+    tr.new-demo td { background: rgba(34, 255, 176, 0.08); }
+</style>
+
+@code {
+    private const int ChartWidth = 600;
+    private const int ChartHeight = 180;
+
+    private sealed record ChartPoint(DateTimeOffset At, double Value, bool Critical);
+
+    private List<HistoryEntryDto> _entries = [];
+    private List<ChartPoint> _chartPoints = [];
+    private double _chartMin;
+    private double _chartMax;
+    private string _kind = "";
+    private int _minutes = 15;
+    private bool _autoRefresh = true;
+    private bool _loading;
+    private string? _error;
+    private string? _demoNote;
+    private HashSet<long> _highlight = [];
+    private DateTimeOffset _lastLoad = DateTimeOffset.MinValue;
+
+    // Selection lives in LiveDashboardState so it survives navigation.
+    private string DeviceMac
+    {
+        get => Live.HistoryDeviceMac ?? "";
+        set => Live.HistoryDeviceMac = string.IsNullOrEmpty(value) ? null : value;
+    }
+
+    private DeviceDto? SelectedDevice => Live.FindDevice(Live.HistoryDeviceMac);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Live.Changed += OnLiveChanged;
+        Live.HistoryDeviceMac ??= Live.Devices.FirstOrDefault(d => d.Kind == DeviceKind.MoistureSensor)?.MacAddress;
+        await LoadAsync();
+    }
+
+    private void OnLiveChanged()
+    {
+        // Live updates can come several times a second; reloading the log at
+        // most every 2 seconds keeps the page responsive.
+        if (_autoRefresh && !_loading && DateTimeOffset.Now - _lastLoad > TimeSpan.FromSeconds(2))
+        {
+            _ = InvokeAsync(async () =>
+            {
+                await LoadAsync();
+                StateHasChanged();
+            });
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _lastLoad = DateTimeOffset.Now;
+        try
+        {
+            HistoryEntryKind? kind = Enum.TryParse<HistoryEntryKind>(_kind, out var k) ? k : null;
+            _entries = await Api.GetHistoryAsync(Live.HistoryDeviceMac, kind, _minutes > 0 ? _minutes : null, 150);
+            BuildChart();
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = SmartXApiClient.DescribeError(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void BuildChart()
+    {
+        _chartPoints = Live.HistoryDeviceMac is null
+            ? []
+            : _entries
+                .Where(e => e.Kind == HistoryEntryKind.Reading && e.Value is not null)
+                .Select(e => new ChartPoint(e.TimestampUtc, e.Value!.Value, e.Severity == ValidationSeverity.Critical))
+                .ToList();
+
+        if (_chartPoints.Count > 0)
+        {
+            _chartMin = _chartPoints.Min(p => p.Value);
+            _chartMax = _chartPoints.Max(p => p.Value);
+        }
+    }
+
+    private double X(DateTimeOffset at)
+    {
+        var start = _chartPoints[0].At;
+        var span = (_chartPoints[^1].At - start).TotalMilliseconds;
+        return span <= 0 ? 0 : (at - start).TotalMilliseconds / span * ChartWidth;
+    }
+
+    private double Y(double value)
+    {
+        var range = _chartMax - _chartMin;
+        var normalised = range <= 0 ? 0.5 : (value - _chartMin) / range;
+        return ChartHeight - 8 - normalised * (ChartHeight - 16);
+    }
+
+    // Entries arrive already in chronological order, so the line is drawn
+    // straight through them without sorting.
+    private string ChartPolyline => string.Join(' ', _chartPoints.Select(p =>
+        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{X(p.At):0.#},{Y(p.Value):0.#}")));
+
+    private async Task SendSameTimestampAsync()
+    {
+        if (SelectedDevice is not { } device) return;
+        var timestamp = DateTimeOffset.UtcNow.AddSeconds(-1);
+        await SendDemoPacketsAsync(device, [timestamp, timestamp],
+            "Two readings sent with an identical CapturedAtUtc - both appear below (highlighted), ordered by sequence number.");
+    }
+
+    private async Task SendLateReadingAsync()
+    {
+        if (SelectedDevice is not { } device) return;
+        await SendDemoPacketsAsync(device, [DateTimeOffset.UtcNow.AddSeconds(-30)],
+            "A buffered reading captured 30s ago was sent just now - it is inserted 30s back in the timeline (highlighted), not at the end.");
+    }
+
+    private async Task SendDemoPacketsAsync(DeviceDto device, DateTimeOffset[] capturedAt, string note)
+    {
+        _loading = true;
+        try
+        {
+            var before = _entries.Count == 0 ? 0 : _entries.Max(e => e.Sequence);
+            foreach (var at in capturedAt)
+            {
+                var (accepted, message) = await Api.SendTelemetryPacketAsync(new TelemetryPacketRequest
+                {
+                    MacAddress = device.MacAddress,
+                    SensorType = device.SensorType,
+                    Value = SafeValue(device),
+                    CapturedAtUtc = at
+                });
+
+                if (!accepted)
+                {
+                    _demoNote = $"Rejected: {message}";
+                    return;
+                }
+            }
+
+            await Task.Delay(800); // let the background worker process them
+            _loading = false;
+            await LoadAsync();
+
+            var expected = capturedAt.ToHashSet();
+            _highlight = _entries
+                .Where(e => e.Sequence > before && e.Kind == HistoryEntryKind.Reading && expected.Contains(e.TimestampUtc))
+                .Select(e => e.Sequence)
+                .ToHashSet();
+            _demoNote = note;
+        }
+        catch (Exception ex)
+        {
+            _error = SmartXApiClient.DescribeError(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    // A value the API will accept for this device type (relays must be 0/1).
+    private static double SafeValue(DeviceDto device) => device.Kind switch
+    {
+        DeviceKind.Relay => device.IsOn ? 1 : 0,
+        _ => Math.Round(device.LastReading ?? 50, 2)
+    };
+
+    public void Dispose() => Live.Changed -= OnLiveChanged;
+}
