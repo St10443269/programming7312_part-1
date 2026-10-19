@@ -16,4 +16,9 @@ var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? builder.HostEnvironment.
 builder.Services.AddScoped<HttpClient>(_ => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
 builder.Services.AddScoped<SmartXApiClient>();
 
+// In Blazor WebAssembly a scoped service lives as long as the browser tab,
+// so this one instance (and its live SSE connection) is shared by every
+// page and survives navigation between them.
+builder.Services.AddScoped<LiveDashboardState>();
+
 await builder.Build().RunAsync();

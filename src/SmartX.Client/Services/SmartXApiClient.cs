@@ -1,8 +1,11 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Components.WebAssembly.Http;
 using SmartX.Shared.Dto;
+using SmartX.Shared.Enums;
 using SmartX.Shared.Models;
+using SmartX.Shared.Search;
 using SmartX.Shared.Validation;
 
 namespace SmartX.Client.Services;
@@ -77,6 +80,120 @@ public sealed class SmartXApiClient(HttpClient http)
         await EnsureSuccessAsync(response);
         var result = await response.Content.ReadFromJsonAsync<DeploymentValidationResponse>(JsonOptions);
         return (result?.IsValid ?? false, result?.Issues ?? []);
+    }
+
+    // ------------------------------------------------ Part 2: real-time stream
+
+    /// <summary>Server-side device search. <paramref name="record"/> = true stores it in search history for the recommendation engine.</summary>
+    public async Task<List<DeviceDto>> SearchDevicesAsync(DeviceQuery query, bool record)
+    {
+        var parameters = new List<string> { $"record={(record ? "true" : "false")}" };
+        if (!string.IsNullOrWhiteSpace(query.Search)) parameters.Add($"search={Uri.EscapeDataString(query.Search.Trim())}");
+        if (query.Kind is { } kind) parameters.Add($"kind={kind}");
+        if (query.Category is { } category) parameters.Add($"category={category}");
+        if (query.Status is { } status) parameters.Add($"status={status}");
+        if (query.AlertsOnly) parameters.Add("alertsOnly=true");
+
+        return await GetAsync<List<DeviceDto>>($"api/devices?{string.Join('&', parameters)}") ?? [];
+    }
+
+    public async Task<CommandRecordDto> SendCommandAsync(DeviceCommandRequest request) =>
+        await ReadCommandResultAsync(await http.PostAsJsonAsync("api/commands", request, JsonOptions));
+
+    public async Task<CommandRecordDto> UndoLastCommandAsync() =>
+        await ReadCommandResultAsync(await http.PostAsync("api/commands/undo", null));
+
+    public async Task<List<CommandRecordDto>> GetCommandLogAsync(int take = 50) =>
+        await GetAsync<List<CommandRecordDto>>($"api/commands?take={take}") ?? [];
+
+    public async Task<List<CommandRecordDto>> GetUndoStackAsync() =>
+        await GetAsync<List<CommandRecordDto>>("api/commands/stack") ?? [];
+
+    public async Task<List<HistoryEntryDto>> GetHistoryAsync(string? macAddress, HistoryEntryKind? kind, int? minutes, int take)
+    {
+        var parameters = new List<string> { $"take={take}" };
+        if (!string.IsNullOrWhiteSpace(macAddress)) parameters.Add($"mac={Uri.EscapeDataString(macAddress)}");
+        if (kind is { } k) parameters.Add($"kind={k}");
+        if (minutes is { } m) parameters.Add($"minutes={m}");
+        return await GetAsync<List<HistoryEntryDto>>($"api/history?{string.Join('&', parameters)}") ?? [];
+    }
+
+    public async Task<RecommendationReportDto?> GetInsightsAsync() =>
+        await GetAsync<RecommendationReportDto>("api/insights");
+
+    public async Task<ProcessingSnapshotDto?> SetProcessingPausedAsync(bool paused) =>
+        await PostForAsync<ProcessingSnapshotDto>(paused ? "api/stream/processing/pause" : "api/stream/processing/resume");
+
+    public async Task SendPriorityBurstAsync() =>
+        await EnsureSuccessAsync(await http.PostAsync("api/stream/demo/priority-burst", null));
+
+    public async Task<(bool Accepted, string Message)> SendTelemetryPacketAsync(TelemetryPacketRequest packet)
+    {
+        var response = await http.PostAsJsonAsync("api/stream/telemetry", packet, JsonOptions);
+        var body = await response.Content.ReadAsStringAsync();
+        return (response.IsSuccessStatusCode, TryReadMessage(body) ?? response.ReasonPhrase ?? "");
+    }
+
+    public async Task<SimulatorStatusDto?> GetSimulatorStatusAsync() =>
+        await GetAsync<SimulatorStatusDto>("api/simulator");
+
+    public async Task<SimulatorStatusDto?> SetSimulatorRunningAsync(bool running) =>
+        await PostForAsync<SimulatorStatusDto>(running ? "api/simulator/start" : "api/simulator/stop");
+
+    public async Task SimulateOutageAsync(string macAddress, int seconds) =>
+        await EnsureSuccessAsync(await http.PostAsync($"api/simulator/devices/{Uri.EscapeDataString(macAddress)}/disconnect?seconds={seconds}", null));
+
+    /// <summary>Opens the Server-Sent Events stream. The caller reads it line by line until cancelled or disconnected.</summary>
+    public async Task<HttpResponseMessage> OpenLiveStreamAsync(CancellationToken cancellationToken)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, "api/stream/live");
+        request.Headers.Accept.ParseAdd("text/event-stream");
+
+        // Without this, the browser's fetch would buffer the whole (never
+        // ending) response before handing any of it to .NET.
+        request.SetBrowserResponseStreamingEnabled(true);
+
+        var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        await EnsureSuccessAsync(response);
+        return response;
+    }
+
+    public static LiveUpdateDto? ParseLiveUpdate(string json) =>
+        JsonSerializer.Deserialize<LiveUpdateDto>(json, JsonOptions);
+
+    // A rejected command still comes back as a CommandRecordDto (with the
+    // outcome and reason), so the UI can show exactly what happened.
+    private static async Task<CommandRecordDto> ReadCommandResultAsync(HttpResponseMessage response)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+        try
+        {
+            var record = JsonSerializer.Deserialize<CommandRecordDto>(body, JsonOptions);
+            if (record is not null)
+            {
+                return record;
+            }
+        }
+        catch (JsonException)
+        {
+            // Not a command record (e.g. a malformed-request message) - fall through.
+        }
+
+        throw new ApiRequestException(TryReadMessage(body) ?? $"{(int)response.StatusCode} {response.ReasonPhrase}", (int)response.StatusCode);
+    }
+
+    private async Task<T?> GetAsync<T>(string url)
+    {
+        var response = await http.GetAsync(url);
+        await EnsureSuccessAsync(response);
+        return await response.Content.ReadFromJsonAsync<T>(JsonOptions);
+    }
+
+    private async Task<T?> PostForAsync<T>(string url)
+    {
+        var response = await http.PostAsync(url, null);
+        await EnsureSuccessAsync(response);
+        return await response.Content.ReadFromJsonAsync<T>(JsonOptions);
     }
 
     /// <summary>
