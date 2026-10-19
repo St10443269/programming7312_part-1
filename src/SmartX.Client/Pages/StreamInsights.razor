@@ -1,0 +1,92 @@
+@page "/stream/insights"
+@inject SmartXApiClient Api
+
+<PageTitle>Suggested Actions</PageTitle>
+
+<div class="page-kicker">// PART 2 &middot; PREDICTIVE ACTIONS</div>
+<h1>Suggested Actions &amp; Automated Insights</h1>
+<p class="page-lead">
+    Recommendations generated from what the app has recorded - alerts in the history log, the commands you sent and the
+    searches you ran. Nothing here runs automatically; a suggested command only executes if you press its button.
+</p>
+
+<div class="insights">
+    <SuggestedActionsPanel />
+
+    <aside class="sx-stack">
+        <section class="sx-card">
+            <h2>How suggestions are generated</h2>
+            <ol class="how small">
+                <li>
+                    <strong>Patterns (alert &rarr; response).</strong> For each alert, the commands and searches you made
+                    <em>while it was active</em> (until the device recovered, at most 5 min) count as responses. Pairs are
+                    tallied in a Dictionary; a pair becomes a pattern with <strong>support &ge; 2</strong> occurrences and
+                    <strong>confidence &ge; 50%</strong> of that alert's occurrences.
+                </li>
+                <li><strong>Recurring faults.</strong> &ge; 3 alerts of the same type for one device within the last hour.</li>
+                <li><strong>Out-of-range readings.</strong> A device's latest reading re-checked against the alert thresholds.</li>
+                <li><strong>Disconnected devices.</strong> No telemetry within the disconnect timeout.</li>
+            </ol>
+            <p class="small muted">
+                Scores rank the list: patterns that apply right now score highest (50 + 40&times;confidence + 30 if active).
+                All thresholds are configurable in the API's <code>appsettings.json</code> under <code>RealTime:Recommendations</code>.
+            </p>
+            <p class="small muted">
+                <strong>Try it:</strong> when Moisture Sensor B raises MOISTURE_LOW, search for "Pump A" and turn Pump A on.
+                Do that twice and a pattern appears; the third time, the suggestion offers to turn Pump A on for you.
+            </p>
+        </section>
+
+        <section class="sx-card">
+            <div class="sx-card-head">
+                <h2>Recent searches</h2>
+                <button class="sx-btn sx-btn-small sx-right" @onclick="LoadSearchesAsync">Refresh</button>
+            </div>
+            <ApiErrorBanner Message="@_error" />
+            @if (_searches.Count == 0)
+            {
+                <p class="muted small">No searches recorded yet. Use the search box on the Live Dashboard.</p>
+            }
+            else
+            {
+                <ul class="searches small">
+                    @foreach (var search in _searches)
+                    {
+                        <li>
+                            <span class="mono muted">@search.AtUtc.ToLocalTime().ToString("HH:mm:ss")</span>
+                            @search.Description
+                            <span class="muted">&rarr; @search.ResultCount match(es)</span>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+    </aside>
+</div>
+
+<style>
+    .insights { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); gap: 1.25rem; align-items: start; }
+    ol.how { padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+    ul.searches { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+    @@media (max-width: 1000px) { .insights { grid-template-columns: 1fr; } }
+</style>
+
+@code {
+    private List<SearchRecordDto> _searches = [];
+    private string? _error;
+
+    protected override async Task OnInitializedAsync() => await LoadSearchesAsync();
+
+    private async Task LoadSearchesAsync()
+    {
+        try
+        {
+            _searches = await Api.GetSearchHistoryAsync(15);
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = SmartXApiClient.DescribeError(ex);
+        }
+    }
+}

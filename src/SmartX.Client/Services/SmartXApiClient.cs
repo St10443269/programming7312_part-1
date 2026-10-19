@@ -118,14 +118,28 @@ public sealed class SmartXApiClient(HttpClient http)
         return await GetAsync<List<HistoryEntryDto>>($"api/history?{string.Join('&', parameters)}") ?? [];
     }
 
+    public async Task<List<SearchRecordDto>> GetSearchHistoryAsync(int take = 20) =>
+        await GetAsync<List<SearchRecordDto>>($"api/devices/searches?take={take}") ?? [];
+
     public async Task<RecommendationReportDto?> GetInsightsAsync() =>
         await GetAsync<RecommendationReportDto>("api/insights");
 
     public async Task<ProcessingSnapshotDto?> SetProcessingPausedAsync(bool paused) =>
         await PostForAsync<ProcessingSnapshotDto>(paused ? "api/stream/processing/pause" : "api/stream/processing/resume");
 
-    public async Task SendPriorityBurstAsync() =>
-        await EnsureSuccessAsync(await http.PostAsync("api/stream/demo/priority-burst", null));
+    /// <summary>Queues the priority demo burst; returns the arrival numbers it was given, in the order it was sent.</summary>
+    public async Task<List<long>> SendPriorityBurstAsync()
+    {
+        var response = await http.PostAsync("api/stream/demo/priority-burst", null);
+        await EnsureSuccessAsync(response);
+        var results = await response.Content.ReadFromJsonAsync<List<BurstResult>>(JsonOptions) ?? [];
+        return results.Where(r => r.ArrivalOrder is not null).Select(r => r.ArrivalOrder!.Value).ToList();
+    }
+
+    private sealed class BurstResult
+    {
+        public long? ArrivalOrder { get; set; }
+    }
 
     public async Task<(bool Accepted, string Message)> SendTelemetryPacketAsync(TelemetryPacketRequest packet)
     {

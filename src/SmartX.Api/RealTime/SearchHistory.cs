@@ -1,9 +1,7 @@
+using SmartX.Shared.Dto;
 using SmartX.Shared.Search;
 
 namespace SmartX.Api.RealTime;
-
-/// <summary>One search the user ran on the dashboard and which devices it found.</summary>
-public sealed record SearchRecord(DateTimeOffset AtUtc, string Description, string? Text, List<string> MatchedMacs, int ResultCount);
 
 /// <summary>
 /// Remembers the user's device searches, so the recommendation engine can
@@ -14,17 +12,19 @@ public sealed class SearchHistory(TimeProvider clock)
     private const int MaxRecords = 500;
     private const int MaxMatchesStored = 5;
 
-    private readonly List<SearchRecord> _records = new();
+    private readonly List<SearchRecordDto> _records = new();
     private readonly object _sync = new();
 
-    public SearchRecord Record(DeviceQuery query, IReadOnlyList<string> matchedMacs)
+    public SearchRecordDto Record(DeviceQuery query, IReadOnlyList<string> matchedMacs)
     {
-        var record = new SearchRecord(
-            clock.GetUtcNow(),
-            query.Describe(),
-            string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim(),
-            matchedMacs.Take(MaxMatchesStored).ToList(),
-            matchedMacs.Count);
+        var record = new SearchRecordDto
+        {
+            AtUtc = clock.GetUtcNow(),
+            Description = query.Describe(),
+            Text = string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim(),
+            MatchedMacs = matchedMacs.Take(MaxMatchesStored).ToList(),
+            ResultCount = matchedMacs.Count
+        };
 
         lock (_sync)
         {
@@ -39,7 +39,7 @@ public sealed class SearchHistory(TimeProvider clock)
     }
 
     /// <summary>All recorded searches, oldest first.</summary>
-    public List<SearchRecord> GetAll()
+    public List<SearchRecordDto> GetAll()
     {
         lock (_sync)
         {
