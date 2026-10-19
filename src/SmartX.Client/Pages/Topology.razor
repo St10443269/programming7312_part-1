@@ -1,0 +1,66 @@
+@page "/topology"
+@implements IDisposable
+@inject LiveDashboardState Live
+
+<PageTitle>Network Topology</PageTitle>
+
+<div class="page-kicker">// FINAL POE MODULE</div>
+<h1>Network Topology &amp; Mesh Routing</h1>
+
+<div class="sx-card not-built">
+    <span class="sx-pill sx-pill-muted">Not yet implemented</span>
+    <p>
+        Mesh routing (node-to-node links, route discovery and path visualisation) is part of the
+        <strong>final PoE</strong> and has <strong>not</strong> been built yet. This page is a placeholder
+        so the navigation already has a home for it.
+    </p>
+    <p class="muted small">
+        What already exists that the final module will build on: the device registry (devices keyed by MAC,
+        grouped by zone below), live device status over Server-Sent Events, and the Part 1 deployment tree
+        (Facility &rarr; Zone &rarr; Sub-Zone &rarr; Device).
+    </p>
+</div>
+
+<h2 class="zones-heading">Current devices by zone <span class="muted small">(live, simulated)</span></h2>
+@if (Live.Devices.Count == 0)
+{
+    <p class="sx-empty">Waiting for the live device list from the API...</p>
+}
+else
+{
+    <div class="zones">
+        @foreach (var zone in Live.Devices.GroupBy(d => d.ZoneName))
+        {
+            <div class="sx-card zone">
+                <h3>@zone.Key</h3>
+                <ul>
+                    @foreach (var device in zone)
+                    {
+                        <li>
+                            <span class="sx-dot sx-dot-@device.Status.ToString().ToLowerInvariant()"></span>
+                            @device.Name <span class="muted small mono">@device.MacAddress</span>
+                        </li>
+                    }
+                </ul>
+            </div>
+        }
+    </div>
+}
+
+<style>
+    .not-built { border-style: dashed; margin-bottom: 1.5rem; max-width: 80ch; }
+    .not-built p { margin: 0.75rem 0 0; }
+    .zones-heading { font-size: 1.05rem; margin-bottom: 0.75rem; }
+    .zones { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+    .zone h3 { font-size: 0.95rem; margin: 0 0 0.5rem; color: var(--sx-cyan); }
+    .zone ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+    .zone li { display: flex; align-items: center; gap: 0.5rem; font-size: 0.88rem; flex-wrap: wrap; }
+</style>
+
+@code {
+    protected override void OnInitialized() => Live.Changed += OnLiveChanged;
+
+    private void OnLiveChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Live.Changed -= OnLiveChanged;
+}

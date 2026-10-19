@@ -86,3 +86,14 @@ article.content {
         padding-right: 1.5rem !important;
     }
 }
+
+.sim-banner {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    color: #ffb020;
+    border: 1px solid rgba(255, 176, 32, 0.35);
+    background: rgba(255, 176, 32, 0.08);
+    border-radius: 999px;
+    padding: 0.2rem 0.75rem;
+}

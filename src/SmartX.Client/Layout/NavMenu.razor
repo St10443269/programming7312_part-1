@@ -1,3 +1,6 @@
+@implements IDisposable
+@inject LiveDashboardState Live
+
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
         <a class="navbar-brand" href="">Smart-X</a>
@@ -7,11 +10,20 @@
     </div>
 </div>
 
+@* NavLink navigation is client-side: Blazor swaps the page component without
+   reloading the app, so the live connection and app state carry over. *@
 <div class="@NavMenuCssClass nav-scrollable" @onclick="ToggleNavMenu">
     <nav class="nav flex-column">
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
                 <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+            </NavLink>
+        </div>
+
+        <div class="nav-section">1 &middot; Sensor Ingestion &amp; Telemetry</div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="telemetry">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Telemetry
             </NavLink>
         </div>
         <div class="nav-item px-3">
@@ -20,16 +32,55 @@
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="telemetry">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Telemetry
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
             <NavLink class="nav-link" href="deployment">
                 <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Deployment Tree
             </NavLink>
         </div>
+
+        <div class="nav-section">2 &middot; Command Stream &amp; History</div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="stream" Match="NavLinkMatch.All">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Live Dashboard
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="stream/commands">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Commands &amp; Undo
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="stream/processing">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Queues &amp; Alerts
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="stream/history">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> History Log
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="stream/insights">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Suggested Actions
+            </NavLink>
+        </div>
+
+        <div class="nav-section">3 &middot; Network Topology</div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="topology">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Topology <span class="nav-soon">Final PoE</span>
+            </NavLink>
+        </div>
     </nav>
+
+    <div class="nav-live live-@Live.ConnectionState.ToString().ToLowerInvariant()" title="@(Live.ConnectionError ?? "Server-Sent Events stream from the API")">
+        <span class="nav-live-dot"></span>
+        @(Live.ConnectionState switch
+        {
+            LiveConnectionState.Connected => "Live stream connected",
+            LiveConnectionState.Connecting => "Connecting to live stream...",
+            _ => $"Reconnecting (attempt {Live.ReconnectAttempts})..."
+        })
+    </div>
 </div>
 
 @code {
@@ -37,8 +88,20 @@
 
     private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
 
+    protected override void OnInitialized()
+    {
+        // Start the shared live connection as soon as the app shell loads, so
+        // every page (and this indicator) has data without its own setup.
+        Live.Changed += OnLiveChanged;
+        Live.Start();
+    }
+
+    private void OnLiveChanged() => InvokeAsync(StateHasChanged);
+
     private void ToggleNavMenu()
     {
         collapseNavMenu = !collapseNavMenu;
     }
+
+    public void Dispose() => Live.Changed -= OnLiveChanged;
 }

@@ -122,3 +122,51 @@
         overflow-y: auto;
     }
 }
+
+.nav-section {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #4c5975;
+    padding: 0.9rem 1.25rem 0.35rem;
+}
+
+.nav-soon {
+    margin-left: 0.5rem;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #7c8aa8;
+    border: 1px dashed rgba(124, 138, 168, 0.4);
+    border-radius: 999px;
+    padding: 0 0.45rem;
+    line-height: 1.3rem;
+}
+
+.nav-live {
+    margin: 0.75rem 1rem 1.25rem;
+    padding: 0.5rem 0.7rem;
+    border-radius: 8px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.72rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: 1px solid rgba(124, 138, 168, 0.25);
+    color: #7c8aa8;
+}
+
+.nav-live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #7c8aa8;
+    flex-shrink: 0;
+}
+
+.live-connected { border-color: rgba(34, 255, 176, 0.35); color: #22ffb0; }
+.live-connected .nav-live-dot { background: #22ffb0; box-shadow: 0 0 8px rgba(34, 255, 176, 0.8); animation: sx-blink 1.6s ease-in-out infinite; }
+.live-reconnecting { border-color: rgba(255, 176, 32, 0.4); color: #ffb020; }
+.live-reconnecting .nav-live-dot { background: #ffb020; }
