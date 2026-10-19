@@ -13,7 +13,7 @@ public readonly record struct ActiveErrorKey(string MacAddress, string Code);
 /// A device in trouble keeps reporting the same bad reading every second.
 /// Without de-duplication each of those would raise a fresh alert. Because a
 /// HashSet only holds unique values, <see cref="HashSet{T}.Add"/> returns
-/// false when that exact (device, error) is already present - an O(1)
+/// false when that exact (device, error) is already present (Microsoft, n.d.g) - an O(1)
 /// check - so the processor raises the alert once and just counts the
 /// repeats. When the device recovers the entry is removed, so the set
 /// always means "currently active", not "ever happened" (past alerts stay

@@ -7,7 +7,7 @@ namespace SmartX.Api.RealTime;
 /// <remarks>
 /// Every incoming telemetry packet identifies its device by MAC, so the
 /// lookup on the hot path is "which device is this MAC?". A dictionary is a
-/// hash table, so that lookup is O(1) on average however many devices are
+/// hash table, so that lookup is O(1) on average (Microsoft, n.d.e) however many devices are
 /// registered, where searching a List would be O(n) per packet. MACs are
 /// normalised (upper-case, ':' separators) before being used as keys so
 /// "24-6f-28-..." and "24:6F:28:..." find the same device.

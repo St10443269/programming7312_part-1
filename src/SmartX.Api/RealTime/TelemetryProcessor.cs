@@ -30,12 +30,12 @@ public sealed record EnqueueResult(bool Accepted, int StatusCode, string Message
 /// <remarks>
 /// <para>
 /// <b>Normal messages</b> (Info severity) go into a <see cref="Queue{T}"/>
-/// and are processed First-In-First-Out, i.e. in the order they arrived.
+/// and are processed First-In-First-Out, i.e. in the order they arrived (Microsoft, n.d.b).
 /// </para>
 /// <para>
 /// <b>Alerts</b> (Warning/Critical) go into a <see cref="PriorityQueue{TElement,TPriority}"/>.
 /// The priority is the tuple (level, arrival order): level 0 = Critical,
-/// 1 = Warning. A PriorityQueue always dequeues the smallest priority
+/// 1 = Warning. A PriorityQueue always dequeues the smallest priority (Microsoft, n.d.c)
 /// first, so Critical beats Warning, and within the same level the earlier
 /// arrival wins (the arrival number breaks the tie, keeping it fair).
 /// </para>

@@ -12,7 +12,7 @@ namespace SmartX.Api.RealTime;
 /// Undo always means "reverse the most recent command", which is exactly
 /// Last-In-First-Out: every accepted command is pushed, and Undo pops the top
 /// one and restores the device's previous state. Push, Peek and Pop are all
-/// O(1).
+/// O(1) (Microsoft, n.d.d).
 /// </para>
 /// <para>
 /// <b>Limitation - state may have moved on.</b> Between the command and the

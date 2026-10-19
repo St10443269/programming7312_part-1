@@ -20,7 +20,7 @@ namespace SmartX.Api.RealTime;
 /// a pattern when it has enough <i>support</i> (seen at least
 /// <c>MinPatternOccurrences</c> times) and <i>confidence</i> (it followed at
 /// least <c>MinPatternConfidence</c> of that trigger's alerts) - the same
-/// support/confidence idea used in association-rule mining.</para>
+/// support/confidence idea used in association-rule mining (Agrawal, Imieliński and Swami, 1993).</para>
 /// <para><b>2. Recurring faults.</b> Alerts grouped by (device, code); at or
 /// above <c>RecurringFaultThreshold</c> in the window, the device is
 /// flagged as problematic.</para>

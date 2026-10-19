@@ -68,7 +68,7 @@ public static class StreamEndpoints
             }));
         });
 
-        // Server-Sent Events: the browser keeps this request open and the API
+        // Server-Sent Events (WHATWG, n.d.): the browser keeps this request open and the API
         // writes a "data:" line each time something changes.
         group.MapGet("/live", (LiveUpdateBroadcaster broadcaster, DeviceRegistry registry, ActiveErrorTracker errors,
                 TelemetryProcessor processor, CancellationToken requestAborted) =>

@@ -478,23 +478,37 @@ because processed Part 2 packets are forwarded into the Part 1 store.
 
 ## References
 
+In-text citations in the source code (e.g. `(Microsoft, n.d.c)`) refer to the
+list below. Where one author has several sources in the same year, they are
+lettered a, b, c ... in the order used in this list.
+
+Agrawal, R., Imieliński, T. and Swami, A. (1993) 'Mining association rules between sets of items in large databases', *Proceedings of the 1993 ACM SIGMOD International Conference on Management of Data*, Washington DC, 25-28 May. New York: ACM, pp. 207-216. doi: 10.1145/170035.170072.
+
 Espressif Systems (n.d.) *ESP32 Wi-Fi & Bluetooth SoC*, viewed 13 September 2026, <https://www.espressif.com/en/products/socs/esp32>.
 
 Internet Engineering Task Force (2014) *RFC 7252: The Constrained Application Protocol (CoAP)*, viewed 13 September 2026, <https://datatracker.ietf.org/doc/html/rfc7252>.
 
-Microsoft (2025) *Boxing and Unboxing (C# Programming Guide)*, Microsoft Learn, viewed 13 September 2026, <https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/types/boxing-and-unboxing>.
+Microsoft (2025a) *Boxing and Unboxing (C# Programming Guide)*, Microsoft Learn, viewed 13 September 2026, <https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/types/boxing-and-unboxing>.
+
+Microsoft (2025b) *ASP.NET Core Blazor Hosting Models*, Microsoft Learn, viewed 13 September 2026, <https://learn.microsoft.com/en-us/aspnet/core/blazor/hosting-models>.
 
 Microsoft (2026) *Generic Types and Methods (C#)*, Microsoft Learn, viewed 13 September 2026, <https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/types/generics>.
 
-Microsoft (n.d.) *Minimal APIs Quick Reference*, Microsoft Learn, viewed 13 September 2026, <https://learn.microsoft.com/en-us/aspnet/core/fundamentals/minimal-apis>.
+Microsoft (n.d.a) *Minimal APIs Quick Reference*, Microsoft Learn, viewed 13 September 2026, <https://learn.microsoft.com/en-us/aspnet/core/fundamentals/minimal-apis>.
 
-Microsoft (2025) *ASP.NET Core Blazor Hosting Models*, Microsoft Learn, viewed 13 September 2026, <https://learn.microsoft.com/en-us/aspnet/core/blazor/hosting-models>.
+Microsoft (n.d.b) *Queue<T> Class*, Microsoft Learn, viewed 19 October 2026, <https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.queue-1>.
 
-Microsoft (n.d.) *PriorityQueue<TElement,TPriority> Class*, Microsoft Learn, viewed 19 October 2026, <https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.priorityqueue-2>.
+Microsoft (n.d.c) *PriorityQueue<TElement,TPriority> Class*, Microsoft Learn, viewed 19 October 2026, <https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.priorityqueue-2>.
 
-Microsoft (n.d.) *SortedDictionary<TKey,TValue> Class*, Microsoft Learn, viewed 19 October 2026, <https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.sorteddictionary-2>.
+Microsoft (n.d.d) *Stack<T> Class*, Microsoft Learn, viewed 19 October 2026, <https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.stack-1>.
 
-Microsoft (n.d.) *HashSet<T> Class*, Microsoft Learn, viewed 19 October 2026, <https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.hashset-1>.
+Microsoft (n.d.e) *Dictionary<TKey,TValue> Class*, Microsoft Learn, viewed 19 October 2026, <https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.dictionary-2>.
+
+Microsoft (n.d.f) *SortedDictionary<TKey,TValue> Class*, Microsoft Learn, viewed 19 October 2026, <https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.sorteddictionary-2>.
+
+Microsoft (n.d.g) *HashSet<T> Class*, Microsoft Learn, viewed 19 October 2026, <https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.hashset-1>.
+
+Microsoft (n.d.h) *Channels*, .NET documentation, Microsoft Learn, viewed 19 October 2026, <https://learn.microsoft.com/en-us/dotnet/core/extensions/channels>.
 
 OASIS (2019) *MQTT Version 5.0*, OASIS Standard, viewed 13 September 2026, <https://docs.oasis-open.org/mqtt/mqtt/v5.0/mqtt-v5.0.html>.
 

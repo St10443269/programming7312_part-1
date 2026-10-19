@@ -24,7 +24,7 @@ public readonly record struct HistoryKey(DateTimeOffset TimestampUtc, long Seque
 /// </summary>
 /// <remarks>
 /// A SortedDictionary keeps its keys in order as they are inserted (it is a
-/// balanced binary search tree, O(log n) per insert). Readings do not always
+/// balanced binary search tree, O(log n) per insert; Microsoft, n.d.f). Readings do not always
 /// arrive in time order - a device can send buffered readings late, with an
 /// older capture time - but they still land in the right place, so the
 /// dashboard's timeline and chart can read the log front-to-back without

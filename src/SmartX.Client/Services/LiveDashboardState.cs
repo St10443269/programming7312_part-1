@@ -141,7 +141,8 @@ public sealed class LiveDashboardState(SmartXApiClient api) : IAsyncDisposable
     }
 
     /// <summary>
-    /// Minimal SSE parser: "data:" lines are collected until a blank line
+    /// Minimal SSE parser following the event-stream format (WHATWG, n.d.):
+    /// "data:" lines are collected until a blank line
     /// ends the event. "event:" names are not needed because the JSON itself
     /// carries a Type field.
     /// </summary>

@@ -6,8 +6,8 @@ namespace SmartX.Api.RealTime;
 
 /// <summary>
 /// Fans live updates out to every connected dashboard over Server-Sent
-/// Events. Each browser connection gets its own bounded channel (a small
-/// thread-safe buffer); <see cref="Publish"/> drops an update into every
+/// Events (WHATWG, n.d.). Each browser connection gets its own bounded channel (a small
+/// thread-safe buffer; Microsoft, n.d.h); <see cref="Publish"/> drops an update into every
 /// channel and the SSE endpoint streams that connection's channel out.
 /// </summary>
 /// <remarks>

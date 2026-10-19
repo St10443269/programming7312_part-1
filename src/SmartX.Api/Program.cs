@@ -4,7 +4,7 @@ using SmartX.Api.Endpoints;
 using SmartX.Api.RealTime;
 using SmartX.Api.Services;
 
-// HTTP/JSON via Minimal APIs (Microsoft, n.d.) rather than a broker protocol
+// HTTP/JSON via Minimal APIs (Microsoft, n.d.a) rather than a broker protocol
 // such as MQTT (OASIS, 2019) or CoAP (Internet Engineering Task Force, 2014):
 // this gateway's clients are a browser dashboard and simulated ingestion
 // calls, not battery-powered devices on a lossy radio link, so the lower

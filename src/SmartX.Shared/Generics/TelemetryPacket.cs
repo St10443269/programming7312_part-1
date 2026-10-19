@@ -16,7 +16,7 @@ namespace SmartX.Shared.Generics;
 /// to a shared reference-type implementation (Microsoft, 2026). The
 /// reading is stored directly in the struct's own memory layout - never
 /// coerced into <c>object</c> - so there is no boxing/unboxing overhead
-/// (Microsoft, 2025) when thousands of packets a second are queued for
+/// (Microsoft, 2025a) when thousands of packets a second are queued for
 /// ingestion.
 /// </para>
 /// </remarks>
