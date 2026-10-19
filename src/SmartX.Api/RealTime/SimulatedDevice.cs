@@ -17,6 +17,7 @@ public sealed class SimulatedDevice
     private bool _isConnected = true;
     private double? _lastReading;
     private DateTimeOffset? _lastSeenUtc;
+    private DateTimeOffset _lastCommandAtUtc = DateTimeOffset.MinValue;
 
     public SimulatedDevice(Guid id, string macAddress, string name, DeviceKind kind, string zoneName, bool isOn = false)
     {
@@ -70,13 +71,14 @@ public sealed class SimulatedDevice
     public double? LastReading { get { lock (_sync) return _lastReading; } }
     public DateTimeOffset? LastSeenUtc { get { lock (_sync) return _lastSeenUtc; } }
 
-    /// <summary>Sets the on/off state. Returns the previous state.</summary>
-    public bool SetPower(bool isOn)
+    /// <summary>Sets the on/off state because of a command issued at <paramref name="commandAtUtc"/>. Returns the previous state.</summary>
+    public bool SetPower(bool isOn, DateTimeOffset commandAtUtc)
     {
         lock (_sync)
         {
             var previous = _isOn;
             _isOn = isOn;
+            _lastCommandAtUtc = commandAtUtc;
             return previous;
         }
     }
@@ -85,9 +87,11 @@ public sealed class SimulatedDevice
     /// Records a processed reading. A switchable device's reading also
     /// reveals its real on/off state (a pump reporting flow is running),
     /// so that state is updated from the reading too - which is how undo
-    /// can tell that a device changed after a command was sent.
+    /// can tell that a device changed after a command was sent. Readings
+    /// captured before the latest command are stale for this purpose (they
+    /// were queued before the switch happened) and don't change the state.
     /// </summary>
-    public void ApplyReading(double value, DateTimeOffset seenAtUtc)
+    public void ApplyReading(double value, DateTimeOffset capturedAtUtc, DateTimeOffset seenAtUtc)
     {
         lock (_sync)
         {
@@ -98,6 +102,11 @@ public sealed class SimulatedDevice
             }
 
             _isConnected = true;
+
+            if (capturedAtUtc <= _lastCommandAtUtc)
+            {
+                return;
+            }
 
             switch (Kind)
             {

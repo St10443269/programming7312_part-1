@@ -273,7 +273,7 @@ public sealed partial class TelemetryProcessor(
 
         var errorsChanged = false;
         var wasConnected = device.IsConnected;
-        device.ApplyReading(message.Value, message.ReceivedAtUtc);
+        device.ApplyReading(message.Value, message.CapturedAtUtc, message.ReceivedAtUtc);
 
         // Any reading proves the device is back online.
         if (!wasConnected && errors.Resolve(device.MacAddress, TelemetryClassifier.Disconnected))

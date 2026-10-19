@@ -43,6 +43,12 @@ builder.Services.AddSingleton<TelemetryClassifier>();
 builder.Services.AddSingleton<LiveUpdateBroadcaster>();
 builder.Services.AddSingleton<TelemetryProcessor>();
 builder.Services.AddHostedService<ProcessingWorker>();
+builder.Services.AddSingleton<CommandService>();
+
+// The simulator is both a hosted background loop and a service the
+// endpoints talk to (start/stop/disconnect), so register one shared instance.
+builder.Services.AddSingleton<DeviceSimulator>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<DeviceSimulator>());
 
 var app = builder.Build();
 
@@ -61,5 +67,7 @@ app.MapGroup("/api/sensors").MapSensorEndpoints();
 app.MapGroup("/api/telemetry").MapTelemetryEndpoints();
 app.MapGroup("/api/deployment").MapDeploymentEndpoints();
 app.MapGroup("/api/stream").MapStreamEndpoints();
+app.MapGroup("/api/simulator").MapSimulatorEndpoints();
+app.MapGroup("/api/commands").MapCommandEndpoints();
 
 app.Run();
