@@ -59,7 +59,7 @@ public sealed partial class TelemetryProcessor(
 {
     public const string PriorityQueueSource = "PriorityQueue";
     public const string NormalQueueSource = "Queue";
-    private const int RecentLogSize = 40;
+    private const int RecentLogSize = 100; // more than one worker batch, so a snapshot never skips messages
 
     private readonly Queue<TelemetryMessage> _normalQueue = new();
     private readonly PriorityQueue<TelemetryMessage, (int Level, long Arrival)> _priorityQueue = new();

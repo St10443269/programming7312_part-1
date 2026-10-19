@@ -1,0 +1,307 @@
+@page "/stream/processing"
+@implements IDisposable
+@inject LiveDashboardState Live
+@inject SmartXApiClient Api
+
+<PageTitle>Queues &amp; Alerts</PageTitle>
+
+<div class="page-kicker">// PART 2 &middot; TELEMETRY PROCESSING</div>
+<h1>Message Queues &amp; Active Alerts</h1>
+<p class="page-lead">
+    How the API orders incoming telemetry: normal readings wait in a FIFO <strong>Queue</strong>; warnings and critical
+    alerts jump ahead through a <strong>PriorityQueue</strong>. Active errors are kept in a <strong>HashSet</strong> so the
+    same problem is only alerted once.
+</p>
+
+<ApiErrorBanner Message="@_error" />
+
+<div class="sx-grid-2">
+    <section class="sx-card">
+        <div class="sx-card-head">
+            <h2>Queues</h2>
+            @if (Processing?.IsPaused == true)
+            {
+                <span class="sx-pill sx-pill-warning">Processing paused</span>
+            }
+        </div>
+
+        <div class="queues">
+            <div class="queue queue-priority">
+                <span class="queue-depth mono">@(Processing?.PriorityQueueDepth ?? 0)</span>
+                <span class="queue-name">PriorityQueue</span>
+                <span class="small muted">Critical = priority 0, Warning = priority 1</span>
+            </div>
+            <div class="queue">
+                <span class="queue-depth mono">@(Processing?.NormalQueueDepth ?? 0)</span>
+                <span class="queue-name">Queue (FIFO)</span>
+                <span class="small muted">Info readings, oldest first</span>
+            </div>
+            <div class="queue">
+                <span class="queue-depth mono">@(Processing?.TotalProcessed ?? 0)</span>
+                <span class="queue-name">Processed</span>
+                <span class="small muted">@(Processing?.TotalRejected ?? 0) rejected (invalid / unknown device)</span>
+            </div>
+        </div>
+
+        <div class="sx-toolbar">
+            <button class="sx-btn" @onclick="TogglePauseAsync" disabled="@_busy">@(Processing?.IsPaused == true ? "Resume processing" : "Pause processing")</button>
+            <button class="sx-btn-primary" @onclick="BurstAsync" disabled="@_busy"
+                    title="Queues 8 normal readings, then 1 warning, then 1 critical power spike - all at once">
+                Inject priority demo burst
+            </button>
+        </div>
+
+        <p class="sx-explain">
+            <strong>Rules:</strong> the PriorityQueue is always served first, lowest priority number first and, within the same
+            priority, earliest arrival first. <strong>Starvation guard:</strong> after @(Processing?.MaxConsecutivePriority ?? 5)
+            alerts in a row, one waiting normal message is processed before alerts resume, so normal telemetry is never
+            ignored indefinitely. Pause processing to watch the queues fill, then resume.
+        </p>
+        @if (_burstNote is not null)
+        {
+            <p class="small" style="color: var(--sx-green)">@_burstNote</p>
+        }
+    </section>
+
+    <section class="sx-card">
+        <div class="sx-card-head">
+            <h2>Active errors</h2>
+            <span class="sx-pill sx-pill-muted">HashSet&lt;(MAC, code)&gt;</span>
+        </div>
+        <p class="sx-explain">
+            <code>HashSet.Add</code> returns false if the same (device, error) is already active, so a repeat is counted as a
+            suppressed duplicate instead of raising another alert. The entry is removed when the device recovers.
+        </p>
+
+        @if (Live.ActiveErrors.Count == 0)
+        {
+            <p class="sx-empty">No active errors right now.</p>
+        }
+        else
+        {
+            <div class="sx-table-wrap">
+                <table class="sx-table">
+                    <thead><tr><th>Device</th><th>Code</th><th>Since</th><th>Duplicates suppressed</th></tr></thead>
+                    <tbody>
+                        @foreach (var error in Live.ActiveErrors)
+                        {
+                            <tr>
+                                <td>@error.DeviceName</td>
+                                <td><span class="sx-pill sx-pill-critical">@error.Code</span></td>
+                                <td class="mono">@error.SinceUtc.ToLocalTime().ToString("HH:mm:ss")</td>
+                                <td class="mono">@error.SuppressedDuplicates</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        <h3 class="sub">Send a telemetry packet</h3>
+        <p class="small muted">Goes through the same validation and queues as the simulator. Send a critical value twice to see the duplicate suppressed.</p>
+        <div class="sx-toolbar">
+            <label>
+                Device
+                <select class="sx-input" @bind="_packetMac">
+                    @foreach (var device in Live.Devices)
+                    {
+                        <option value="@device.MacAddress">@device.Name (@device.SensorType)</option>
+                    }
+                </select>
+            </label>
+            <label>
+                Value
+                <input class="sx-input" type="number" step="0.1" @bind="_packetValue" style="min-width: 6rem" />
+            </label>
+            <button class="sx-btn" @onclick="() => SendPacketAsync(1)" disabled="@(_busy || _packetMac is null)">Send packet</button>
+            <button class="sx-btn" @onclick="() => SendPacketAsync(2)" disabled="@(_busy || _packetMac is null)" title="Sends the same packet twice back-to-back">Send twice</button>
+        </div>
+        <div class="small muted">Critical: moisture &lt; 20 %, power &gt; 1500 W, temperature &gt; 40 °C.</div>
+        @if (_packetResult is not null)
+        {
+            <div class="sx-feedback @(_packetAccepted ? "sx-feedback-accepted" : "sx-feedback-rejected")">@_packetResult</div>
+        }
+    </section>
+</div>
+
+@if (_burstArrivals.Count > 0)
+{
+    <section class="sx-card processed">
+        <div class="sx-card-head">
+            <h2>Priority demo result</h2>
+            <span class="small muted">the @_burstArrivals.Count burst messages, in the order they were processed (@_burstRows.Count processed so far)</span>
+        </div>
+        <div class="sx-table-wrap">
+            <table class="sx-table">
+                <thead><tr><th>Processed (rank)</th><th>Arrived #</th><th>Sent as</th><th>From</th><th>Severity</th><th>Device</th></tr></thead>
+                <tbody>
+                    @{ var rank = 0; }
+                    @foreach (var message in _burstRows.Values.OrderBy(m => m.ProcessedOrder))
+                    {
+                        rank++;
+                        <tr class="@(message.Source == "PriorityQueue" ? "sx-row-highlight" : "")">
+                            <td class="mono">@rank</td>
+                            <td class="mono">@message.ArrivalOrder</td>
+                            <td class="mono">@(_burstArrivals.IndexOf(message.ArrivalOrder) + 1) of @_burstArrivals.Count</td>
+                            <td>@message.Source</td>
+                            <td><span class="sx-pill sx-pill-@message.Severity.ToString().ToLowerInvariant()">@message.Severity</span></td>
+                            <td>@message.DeviceName</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="small muted">The critical and warning were sent last (9th and 10th) but are processed first; the normal readings follow in the order they were sent.</p>
+    </section>
+}
+
+<section class="sx-card processed">
+    <div class="sx-card-head">
+        <h2>Processing order (all traffic)</h2>
+        <span class="small muted">most recent first &middot; compare "processed #" with "arrived #"</span>
+    </div>
+    @if (Processing is null || Processing.RecentlyProcessed.Count == 0)
+    {
+        <p class="sx-empty">Nothing processed yet.</p>
+    }
+    else
+    {
+        <div class="sx-table-wrap">
+            <table class="sx-table">
+                <thead><tr><th>Processed #</th><th>Arrived #</th><th>From</th><th>Severity</th><th>Device</th><th>Reading</th><th>At</th></tr></thead>
+                <tbody>
+                    @foreach (var message in Processing.RecentlyProcessed.Take(25))
+                    {
+                        <tr @key="message.ProcessedOrder" class="@(message.Source == "PriorityQueue" ? "sx-row-highlight" : "")">
+                            <td class="mono">@message.ProcessedOrder</td>
+                            <td class="mono">@message.ArrivalOrder</td>
+                            <td>@message.Source</td>
+                            <td><span class="sx-pill sx-pill-@message.Severity.ToString().ToLowerInvariant()">@message.Severity</span></td>
+                            <td>@message.DeviceName</td>
+                            <td class="mono small">@message.SensorType = @message.Value.ToString("0.##")</td>
+                            <td class="mono small">@message.ProcessedAtUtc.ToLocalTime().ToString("HH:mm:ss.fff")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<style>
+    .queues { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 1rem; }
+    .queue { border: 1px solid var(--sx-border); border-radius: 10px; padding: 0.7rem; display: flex; flex-direction: column; gap: 0.15rem; }
+    .queue-priority { border-color: rgba(255, 59, 96, 0.4); }
+    .queue-depth { font-size: 1.6rem; color: var(--sx-cyan); }
+    .queue-priority .queue-depth { color: var(--sx-red); }
+    .queue-name { font-weight: 700; }
+    .sub { font-size: 0.95rem; margin: 1.25rem 0 0.25rem; }
+    .processed { margin-top: 1.25rem; }
+    @@media (max-width: 640px) { .queues { grid-template-columns: 1fr; } }
+</style>
+
+@code {
+    private bool _busy;
+    private string? _error;
+    private string? _burstNote;
+    private string? _packetMac;
+    private double _packetValue = 12;
+    private string? _packetResult;
+    private bool _packetAccepted;
+    private List<long> _burstArrivals = [];
+    private readonly Dictionary<long, ProcessedMessageDto> _burstRows = new();
+
+    private ProcessingSnapshotDto? Processing => Live.Processing;
+
+    protected override void OnInitialized()
+    {
+        Live.Changed += OnLiveChanged;
+        _packetMac = Live.Devices.FirstOrDefault(d => d.Kind == DeviceKind.MoistureSensor)?.MacAddress;
+    }
+
+    private void OnLiveChanged()
+    {
+        _packetMac ??= Live.Devices.FirstOrDefault(d => d.Kind == DeviceKind.MoistureSensor)?.MacAddress;
+        CaptureBurstRows();
+        InvokeAsync(StateHasChanged);
+    }
+
+    // The live table scrolls quickly (the simulator adds ~9 messages a
+    // second), so the burst's own messages are copied out as they appear.
+    private void CaptureBurstRows()
+    {
+        if (_burstArrivals.Count == 0 || Processing is null)
+        {
+            return;
+        }
+
+        foreach (var message in Processing.RecentlyProcessed)
+        {
+            if (_burstArrivals.Contains(message.ArrivalOrder))
+            {
+                _burstRows[message.ArrivalOrder] = message;
+            }
+        }
+    }
+
+    private async Task TogglePauseAsync()
+    {
+        await RunAsync(async () => { await Api.SetProcessingPausedAsync(!(Processing?.IsPaused ?? false)); });
+    }
+
+    private async Task BurstAsync()
+    {
+        await RunAsync(async () =>
+        {
+            _burstRows.Clear();
+            _burstArrivals = await Api.SendPriorityBurstAsync();
+            _burstNote = "Burst queued: 8 normal, then 1 warning, then 1 critical. The critical (arrived last) should be processed first.";
+            CaptureBurstRows();
+        });
+    }
+
+    private async Task SendPacketAsync(int times)
+    {
+        var device = Live.FindDevice(_packetMac);
+        if (device is null)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var packet = new TelemetryPacketRequest { MacAddress = device.MacAddress, SensorType = device.SensorType, Value = _packetValue };
+            var results = new List<string>();
+            _packetAccepted = true;
+
+            for (var i = 0; i < times; i++)
+            {
+                var (accepted, message) = await Api.SendTelemetryPacketAsync(packet);
+                _packetAccepted &= accepted;
+                results.Add(message);
+            }
+
+            _packetResult = $"{device.Name}: {string.Join(" / ", results.Distinct())}" + (times > 1 ? $" (x{times})" : "");
+        });
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true;
+        try
+        {
+            await action();
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = SmartXApiClient.DescribeError(ex);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    public void Dispose() => Live.Changed -= OnLiveChanged;
+}
