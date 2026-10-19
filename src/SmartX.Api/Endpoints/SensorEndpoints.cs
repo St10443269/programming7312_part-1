@@ -1,3 +1,4 @@
+using SmartX.Api.RealTime;
 using SmartX.Api.Services;
 using SmartX.Shared.Dto;
 using SmartX.Shared.Models;
@@ -18,7 +19,7 @@ public static class SensorEndpoints
         group.MapGet("/{id:guid}", (Guid id, ISensorRepository repo) =>
             repo.GetById(id) is { } sensor ? Results.Ok(ToSummary(sensor)) : Results.NotFound());
 
-        group.MapPost("/", (RegisterSensorRequest request, ISensorRepository repo) =>
+        group.MapPost("/", (RegisterSensorRequest request, ISensorRepository repo, DeviceRegistry registry) =>
         {
             if (string.IsNullOrWhiteSpace(request.MacAddress))
             {
@@ -28,7 +29,7 @@ public static class SensorEndpoints
                 });
             }
 
-            if (repo.MacAddressExists(request.MacAddress))
+            if (registry.Contains(request.MacAddress) || repo.MacAddressExists(request.MacAddress))
             {
                 return Results.Conflict(new { message = $"A sensor with MAC address '{request.MacAddress}' is already registered." });
             }
@@ -42,6 +43,13 @@ public static class SensorEndpoints
                 NodeId = request.NodeId,
                 Category = request.Category
             });
+
+            // Part 2 bridge: a device registered on the Part 1 Sensors page
+            // also joins the real-time device registry (keyed by MAC), so the
+            // simulator, live dashboard and commands include it too.
+            registry.TryRegister(new SimulatedDevice(
+                sensor.Id, sensor.MacAddress, sensor.NodeId,
+                DemoNetworkSeeder.KindForCategory(sensor.Category), sensor.ZoneName));
 
             return Results.Created($"/api/sensors/{sensor.Id}", ToSummary(sensor));
         });

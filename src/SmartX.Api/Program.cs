@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using SmartX.Api.Endpoints;
+using SmartX.Api.RealTime;
 using SmartX.Api.Services;
 
 // HTTP/JSON via Minimal APIs (Microsoft, n.d.) rather than a broker protocol
@@ -30,7 +31,16 @@ builder.Services.AddSingleton<ISensorRepository, SensorRepository>();
 builder.Services.AddSingleton<ITelemetryStore, TelemetryStore>();
 builder.Services.AddSingleton<MockTelemetrySeeder>();
 
+// Part 2 - real-time processing and device management. All singletons:
+// the state is in-memory and shared by every request and background worker.
+var realTimeOptions = builder.Configuration.GetSection("RealTime").Get<RealTimeOptions>() ?? new RealTimeOptions();
+builder.Services.AddSingleton(realTimeOptions);
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<DeviceRegistry>();
+
 var app = builder.Build();
+
+DemoNetworkSeeder.Seed(app.Services.GetRequiredService<DeviceRegistry>(), app.Services.GetRequiredService<ISensorRepository>());
 
 app.UseCors(ClientCorsPolicy);
 
