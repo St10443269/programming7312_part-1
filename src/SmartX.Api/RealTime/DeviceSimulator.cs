@@ -149,7 +149,7 @@ public sealed class DeviceSimulator(
                 }
                 else
                 {
-                    var spike = _random.NextDouble() < 0.04;
+                    var spike = _random.NextDouble() < 0.01;
                     state.LastWatts = spike ? _random.Next(1600, 2100) : _random.Next(120, 300);
                 }
 

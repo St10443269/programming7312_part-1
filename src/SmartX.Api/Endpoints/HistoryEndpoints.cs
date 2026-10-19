@@ -3,7 +3,7 @@ using SmartX.Shared.Enums;
 
 namespace SmartX.Api.Endpoints;
 
-/// <summary>Read access to the chronological history log and the active error set.</summary>
+/// <summary>Read access to the chronological history log, the active error set and the recommendation engine.</summary>
 public static class HistoryEndpoints
 {
     public static RouteGroupBuilder MapHistoryEndpoints(this RouteGroupBuilder group)
@@ -27,6 +27,8 @@ public static class HistoryEndpoints
         });
 
         group.MapGet("/errors", (ActiveErrorTracker errors) => Results.Ok(errors.GetAll()));
+
+        group.MapGet("/insights", (RecommendationEngine engine) => Results.Ok(engine.Generate()));
 
         return group;
     }

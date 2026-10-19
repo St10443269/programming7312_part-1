@@ -52,6 +52,7 @@ builder.Services.AddSingleton<TelemetryProcessor>();
 builder.Services.AddHostedService<ProcessingWorker>();
 builder.Services.AddSingleton<CommandService>();
 builder.Services.AddSingleton<SearchHistory>();
+builder.Services.AddSingleton<RecommendationEngine>();
 
 // The simulator is both a hosted background loop and a service the
 // endpoints talk to (start/stop/disconnect), so register one shared instance.
