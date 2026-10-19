@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Serialization;
 using SmartX.Api.Endpoints;
 using SmartX.Api.RealTime;
@@ -9,6 +10,12 @@ using SmartX.Api.Services;
 // calls, not battery-powered devices on a lossy radio link, so the lower
 // per-message overhead those protocols offer isn't the binding constraint here.
 var builder = WebApplication.CreateBuilder(args);
+
+// Format numbers the same on every machine ("23.62", not "23,62" on a
+// machine set to a comma-decimal locale) in API messages and history text.
+CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
+CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
@@ -44,6 +51,7 @@ builder.Services.AddSingleton<LiveUpdateBroadcaster>();
 builder.Services.AddSingleton<TelemetryProcessor>();
 builder.Services.AddHostedService<ProcessingWorker>();
 builder.Services.AddSingleton<CommandService>();
+builder.Services.AddSingleton<SearchHistory>();
 
 // The simulator is both a hosted background loop and a service the
 // endpoints talk to (start/stop/disconnect), so register one shared instance.
@@ -69,5 +77,7 @@ app.MapGroup("/api/deployment").MapDeploymentEndpoints();
 app.MapGroup("/api/stream").MapStreamEndpoints();
 app.MapGroup("/api/simulator").MapSimulatorEndpoints();
 app.MapGroup("/api/commands").MapCommandEndpoints();
+app.MapGroup("/api/devices").MapDeviceEndpoints();
+app.MapGroup("/api").MapHistoryEndpoints();
 
 app.Run();
